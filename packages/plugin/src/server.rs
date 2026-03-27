@@ -287,6 +287,9 @@ async fn execute_command(
             let u = json_str(&url);
             eval_js(pending, queue, &format!(r#"(function(){{ window.location.href={u}; return null; }})()"#, u=u)).await
         }
+        Command::Screenshot { path } => {
+            take_screenshot(pending, queue, path).await
+        }
     }
 }
 
@@ -328,4 +331,143 @@ async fn eval_js(
             Response::err("timeout (30s)".to_string())
         }
     }
+}
+
+/// Take a screenshot by loading html2canvas in the webview and rendering to PNG.
+async fn take_screenshot(
+    pending: &PendingResults,
+    queue: &CommandQueue,
+    path: Option<String>,
+) -> Response {
+    // Capture screenshot using SVG foreignObject → Canvas → data URL.
+    // This is a pure inline approach that works without external dependencies.
+    // Limitation: won't capture images loaded from external URLs (tainted canvas).
+    let script = r#"
+(async function() {
+  var w = document.documentElement.scrollWidth;
+  var h = document.documentElement.scrollHeight;
+  var clone = document.documentElement.cloneNode(true);
+
+  // Inline all computed styles
+  var styles = '';
+  try {
+    for (var i = 0; i < document.styleSheets.length; i++) {
+      try {
+        var rules = document.styleSheets[i].cssRules || document.styleSheets[i].rules;
+        if (rules) {
+          for (var j = 0; j < rules.length; j++) {
+            styles += rules[j].cssText + '\n';
+          }
+        }
+      } catch(e) { /* cross-origin stylesheet, skip */ }
+    }
+  } catch(e) {}
+
+  var styleEl = document.createElement('style');
+  styleEl.textContent = styles;
+  clone.querySelector('head').appendChild(styleEl);
+
+  // Remove scripts from clone
+  clone.querySelectorAll('script').forEach(function(s) { s.remove(); });
+
+  var html = new XMLSerializer().serializeToString(clone);
+
+  var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="' + w + '" height="' + h + '">' +
+    '<foreignObject width="100%" height="100%">' + html + '</foreignObject></svg>';
+
+  var canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = h;
+  var ctx = canvas.getContext('2d');
+
+  var blob = new Blob([svg], { type: 'image/svg+xml;charset=utf-8' });
+  var url = URL.createObjectURL(blob);
+
+  return new Promise(function(resolve, reject) {
+    var img = new Image();
+    img.onload = function() {
+      ctx.drawImage(img, 0, 0);
+      URL.revokeObjectURL(url);
+      try {
+        resolve(canvas.toDataURL('image/png'));
+      } catch(e) {
+        reject(new Error('canvas tainted: ' + e.message));
+      }
+    };
+    img.onerror = function() {
+      URL.revokeObjectURL(url);
+      reject(new Error('svg render failed'));
+    };
+    img.src = url;
+  });
+})()
+"#;
+
+    let result = eval_js(pending, queue, script).await;
+
+    if !result.ok {
+        return result;
+    }
+
+    // result.data is a data:image/png;base64,... string
+    if let Some(serde_json::Value::String(data_url)) = &result.data {
+        if let Some(base64_data) = data_url.strip_prefix("data:image/png;base64,") {
+            // If a path was provided, save the file
+            if let Some(ref file_path) = path {
+                match base64_decode(base64_data) {
+                    Ok(bytes) => {
+                        if let Err(e) = tokio::fs::write(file_path, &bytes).await {
+                            return Response::err(format!("write file: {}", e));
+                        }
+                        return Response::ok(serde_json::json!({
+                            "path": file_path,
+                            "size": bytes.len()
+                        }));
+                    }
+                    Err(e) => return Response::err(format!("base64 decode: {}", e)),
+                }
+            }
+
+            // Return base64 and size
+            return Response::ok(serde_json::json!({
+                "base64": base64_data,
+                "size": base64_data.len()
+            }));
+        }
+    }
+
+    Response::err("unexpected screenshot result format".to_string())
+}
+
+fn base64_decode(input: &str) -> Result<Vec<u8>, String> {
+    const TABLE: [u8; 256] = {
+        let mut t = [255u8; 256];
+        let chars = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+        let mut i = 0;
+        while i < 64 {
+            t[chars[i] as usize] = i as u8;
+            i += 1;
+        }
+        t
+    };
+
+    let bytes: Vec<u8> = input.bytes().filter(|&b| b != b'=' && b != b'\n' && b != b'\r').collect();
+    let mut result = Vec::with_capacity(bytes.len() * 3 / 4);
+
+    for chunk in bytes.chunks(4) {
+        if chunk.len() < 2 { break; }
+        let a = TABLE[chunk[0] as usize] as u32;
+        let b = TABLE[chunk[1] as usize] as u32;
+        let c = if chunk.len() > 2 { TABLE[chunk[2] as usize] as u32 } else { 0 };
+        let d = if chunk.len() > 3 { TABLE[chunk[3] as usize] as u32 } else { 0 };
+
+        if a == 255 || b == 255 { return Err("invalid base64".to_string()); }
+
+        let n = (a << 18) | (b << 12) | (c << 6) | d;
+        result.push((n >> 16) as u8);
+        if chunk.len() > 2 && c != 255 { result.push((n >> 8) as u8); }
+        if chunk.len() > 3 && d != 255 { result.push(n as u8); }
+    }
+
+    Ok(result)
 }

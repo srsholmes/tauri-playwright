@@ -77,6 +77,13 @@ pub enum Command {
     Goto {
         url: String,
     },
+
+    /// Take a screenshot of the webview (returned as base64 PNG)
+    Screenshot {
+        /// Optional: save to this file path instead of returning base64
+        #[serde(default)]
+        path: Option<String>,
+    },
 }
 
 /// Response sent back to the Playwright test runner.
