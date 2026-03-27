@@ -1,0 +1,15 @@
+[package]
+name = "tauri-plugin-playwright"
+version = "0.1.0"
+edition = "2021"
+description = "Tauri plugin that enables Playwright E2E testing by embedding a control server in the app"
+license = "MIT"
+repository = "https://github.com/srsholmes/tauri-playwright"
+keywords = ["tauri", "playwright", "testing", "e2e", "webdriver"]
+
+[dependencies]
+tauri = { version = "2", features = [] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["net", "io-util", "sync", "macros", "rt", "time"] }
+log = "0.4"
