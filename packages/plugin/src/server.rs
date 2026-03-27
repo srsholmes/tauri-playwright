@@ -6,10 +6,12 @@ use tokio::sync::{oneshot, Mutex};
 use tauri::{AppHandle, Runtime};
 
 use crate::commands::{Command, Response};
+use crate::native_capture::RecordingSession;
 
 static COUNTER: AtomicU64 = AtomicU64::new(0);
 
 pub type PendingResults = Arc<Mutex<HashMap<String, oneshot::Sender<String>>>>;
+pub type RecordingState = Arc<Mutex<Option<RecordingSession>>>;
 pub const CALLBACK_PORT: u16 = 6275;
 
 /// Queue of JS commands waiting to be picked up by the polling webview.
@@ -28,6 +30,7 @@ pub fn start<R: Runtime>(
 ) {
     let app = Arc::new(app);
     let queue: CommandQueue = Arc::new(Mutex::new(VecDeque::new()));
+    let recording: RecordingState = Arc::new(Mutex::new(None));
 
     // Start HTTP server (handles both polling and result callbacks)
     let pending_http = Arc::clone(&pending);
@@ -43,8 +46,9 @@ pub fn start<R: Runtime>(
         let app = Arc::clone(&app);
         let pending = Arc::clone(&pending);
         let queue = Arc::clone(&queue);
+        let recording = Arc::clone(&recording);
         tauri::async_runtime::spawn(async move {
-            if let Err(e) = run_unix_server(app, pending, queue, &path).await {
+            if let Err(e) = run_unix_server(app, pending, queue, recording, &path).await {
                 eprintln!("tauri-plugin-playwright: unix server error: {}", e);
             }
         });
@@ -54,8 +58,9 @@ pub fn start<R: Runtime>(
     let port = tcp_port.unwrap_or(6274);
     let pending = Arc::clone(&pending);
     let queue = Arc::clone(&queue);
+    let recording = Arc::clone(&recording);
     tauri::async_runtime::spawn(async move {
-        if let Err(e) = run_tcp_server(app, pending, queue, port).await {
+        if let Err(e) = run_tcp_server(app, pending, queue, recording, port).await {
             eprintln!("tauri-plugin-playwright: tcp server error: {}", e);
         }
     });
@@ -136,6 +141,7 @@ async fn run_unix_server<R: Runtime>(
     app: Arc<AppHandle<R>>,
     pending: PendingResults,
     queue: CommandQueue,
+    recording: RecordingState,
     path: &str,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let _ = std::fs::remove_file(path);
@@ -147,9 +153,10 @@ async fn run_unix_server<R: Runtime>(
         let app = Arc::clone(&app);
         let pending = Arc::clone(&pending);
         let queue = Arc::clone(&queue);
+        let recording = Arc::clone(&recording);
         tauri::async_runtime::spawn(async move {
             let (reader, writer) = stream.into_split();
-            handle_connection(app, pending, queue, reader, writer).await;
+            handle_connection(app, pending, queue, recording, reader, writer).await;
         });
     }
 }
@@ -158,6 +165,7 @@ async fn run_tcp_server<R: Runtime>(
     app: Arc<AppHandle<R>>,
     pending: PendingResults,
     queue: CommandQueue,
+    recording: RecordingState,
     port: u16,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let listener = tokio::net::TcpListener::bind(format!("127.0.0.1:{}", port)).await?;
@@ -168,9 +176,10 @@ async fn run_tcp_server<R: Runtime>(
         let app = Arc::clone(&app);
         let pending = Arc::clone(&pending);
         let queue = Arc::clone(&queue);
+        let recording = Arc::clone(&recording);
         tauri::async_runtime::spawn(async move {
             let (reader, writer) = stream.into_split();
-            handle_connection(app, pending, queue, reader, writer).await;
+            handle_connection(app, pending, queue, recording, reader, writer).await;
         });
     }
 }
@@ -179,6 +188,7 @@ async fn handle_connection<R: Runtime, Reader, Writer>(
     _app: Arc<AppHandle<R>>,
     pending: PendingResults,
     queue: CommandQueue,
+    recording: RecordingState,
     reader: Reader,
     mut writer: Writer,
 ) where
@@ -192,7 +202,7 @@ async fn handle_connection<R: Runtime, Reader, Writer>(
         if line.is_empty() { continue; }
 
         let response = match serde_json::from_str::<Command>(&line) {
-            Ok(cmd) => execute_command(&pending, &queue, cmd).await,
+            Ok(cmd) => execute_command(&pending, &queue, &recording, cmd).await,
             Err(e) => Response::err(format!("invalid command: {}", e)),
         };
 
@@ -213,6 +223,7 @@ fn json_str(s: &str) -> String {
 async fn execute_command(
     pending: &PendingResults,
     queue: &CommandQueue,
+    recording: &RecordingState,
     cmd: Command,
 ) -> Response {
     match cmd {
@@ -281,6 +292,243 @@ async fn execute_command(
             let s = json_str(&selector);
             eval_js(pending, queue, &format!(r#"document.querySelectorAll({s}).length"#, s=s)).await
         }
+        Command::InnerHtml { selector } => {
+            let s = json_str(&selector);
+            eval_js(pending, queue, &format!(
+                r#"(function(){{ var el=document.querySelector({s}); if(!el) throw new Error('not found: '+{s}); return el.innerHTML; }})()"#, s=s
+            )).await
+        }
+        Command::InnerText { selector } => {
+            let s = json_str(&selector);
+            eval_js(pending, queue, &format!(
+                r#"(function(){{ var el=document.querySelector({s}); if(!el) throw new Error('not found: '+{s}); return el.innerText; }})()"#, s=s
+            )).await
+        }
+        Command::AllTextContents { selector } => {
+            let s = json_str(&selector);
+            eval_js(pending, queue, &format!(
+                r#"Array.from(document.querySelectorAll({s})).map(function(el){{ return el.textContent||''; }})"#, s=s
+            )).await
+        }
+        Command::AllInnerTexts { selector } => {
+            let s = json_str(&selector);
+            eval_js(pending, queue, &format!(
+                r#"Array.from(document.querySelectorAll({s})).map(function(el){{ return el.innerText||''; }})"#, s=s
+            )).await
+        }
+        Command::IsChecked { selector } => {
+            let s = json_str(&selector);
+            eval_js(pending, queue, &format!(
+                r#"(function(){{ var el=document.querySelector({s}); if(!el) throw new Error('not found: '+{s}); return !!el.checked; }})()"#, s=s
+            )).await
+        }
+        Command::IsDisabled { selector } => {
+            let s = json_str(&selector);
+            eval_js(pending, queue, &format!(
+                r#"(function(){{ var el=document.querySelector({s}); if(!el) throw new Error('not found: '+{s}); return el.disabled===true||el.hasAttribute('disabled'); }})()"#, s=s
+            )).await
+        }
+        Command::IsEditable { selector } => {
+            let s = json_str(&selector);
+            eval_js(pending, queue, &format!(
+                r#"(function(){{ var el=document.querySelector({s}); if(!el) throw new Error('not found: '+{s}); if(el.disabled||el.readOnly) return false; var tag=el.tagName; return tag==='INPUT'||tag==='TEXTAREA'||tag==='SELECT'||el.isContentEditable; }})()"#, s=s
+            )).await
+        }
+        Command::BoundingBox { selector } => {
+            let s = json_str(&selector);
+            eval_js(pending, queue, &format!(
+                r#"(function(){{ var el=document.querySelector({s}); if(!el) return null; var r=el.getBoundingClientRect(); return {{x:r.left,y:r.top,width:r.width,height:r.height}}; }})()"#, s=s
+            )).await
+        }
+        Command::Hover { selector } => {
+            let s = json_str(&selector);
+            eval_js(pending, queue, &format!(
+                r#"(function(){{ var el=document.querySelector({s}); if(!el) throw new Error('not found: '+{s}); el.scrollIntoView({{block:'center'}}); var r=el.getBoundingClientRect(); var cx=r.left+r.width/2; var cy=r.top+r.height/2; el.dispatchEvent(new MouseEvent('mouseenter',{{bubbles:true,clientX:cx,clientY:cy}})); el.dispatchEvent(new MouseEvent('mouseover',{{bubbles:true,clientX:cx,clientY:cy}})); return null; }})()"#, s=s
+            )).await
+        }
+        Command::Dblclick { selector } => {
+            let s = json_str(&selector);
+            eval_js(pending, queue, &format!(
+                r#"(function(){{ var el=document.querySelector({s}); if(!el) throw new Error('not found: '+{s}); el.scrollIntoView({{block:'center'}}); el.dispatchEvent(new MouseEvent('dblclick',{{bubbles:true}})); return null; }})()"#, s=s
+            )).await
+        }
+        Command::Check { selector } => {
+            let s = json_str(&selector);
+            eval_js(pending, queue, &format!(
+                r#"(function(){{ var el=document.querySelector({s}); if(!el) throw new Error('not found: '+{s}); if(!el.checked){{ el.click(); }} return null; }})()"#, s=s
+            )).await
+        }
+        Command::Uncheck { selector } => {
+            let s = json_str(&selector);
+            eval_js(pending, queue, &format!(
+                r#"(function(){{ var el=document.querySelector({s}); if(!el) throw new Error('not found: '+{s}); if(el.checked){{ el.click(); }} return null; }})()"#, s=s
+            )).await
+        }
+        Command::SelectOption { selector, value } => {
+            let s = json_str(&selector);
+            let v = json_str(&value);
+            eval_js(pending, queue, &format!(
+                r#"(function(){{ var el=document.querySelector({s}); if(!el) throw new Error('not found: '+{s}); el.value={v}; el.dispatchEvent(new Event('change',{{bubbles:true}})); return el.value; }})()"#, s=s, v=v
+            )).await
+        }
+        Command::Focus { selector } => {
+            let s = json_str(&selector);
+            eval_js(pending, queue, &format!(
+                r#"(function(){{ var el=document.querySelector({s}); if(!el) throw new Error('not found: '+{s}); el.focus(); return null; }})()"#, s=s
+            )).await
+        }
+        Command::Blur { selector } => {
+            let s = json_str(&selector);
+            eval_js(pending, queue, &format!(
+                r#"(function(){{ var el=document.querySelector({s}); if(!el) throw new Error('not found: '+{s}); el.blur(); return null; }})()"#, s=s
+            )).await
+        }
+        Command::WaitForFunction { expression, timeout_ms } => {
+            let e = json_str(&expression);
+            eval_js(pending, queue, &format!(
+                r#"(async function(){{ var dl=Date.now()+{t}; while(Date.now()<dl){{ try{{ var r=eval({e}); if(r) return r; }}catch(ex){{}} await new Promise(function(r){{setTimeout(r,100)}}); }} throw new Error('waitForFunction timeout: '+{e}); }})()"#,
+                e=e, t=timeout_ms
+            )).await
+        }
+        Command::Content => {
+            eval_js(pending, queue, "document.documentElement.outerHTML").await
+        }
+        Command::DragAndDrop { source, target } => {
+            let src = json_str(&source);
+            let tgt = json_str(&target);
+            eval_js(pending, queue, &format!(
+                r#"(function(){{
+                    var s=document.querySelector({src}); if(!s) throw new Error('source not found: '+{src});
+                    var t=document.querySelector({tgt}); if(!t) throw new Error('target not found: '+{tgt});
+                    s.scrollIntoView({{block:'center'}});
+                    var sr=s.getBoundingClientRect(); var tr=t.getBoundingClientRect();
+                    var sx=sr.left+sr.width/2, sy=sr.top+sr.height/2;
+                    var tx=tr.left+tr.width/2, ty=tr.top+tr.height/2;
+                    var dt=new DataTransfer();
+                    s.dispatchEvent(new DragEvent('dragstart',{{bubbles:true,clientX:sx,clientY:sy,dataTransfer:dt}}));
+                    s.dispatchEvent(new DragEvent('drag',{{bubbles:true,clientX:sx,clientY:sy,dataTransfer:dt}}));
+                    t.dispatchEvent(new DragEvent('dragenter',{{bubbles:true,clientX:tx,clientY:ty,dataTransfer:dt}}));
+                    t.dispatchEvent(new DragEvent('dragover',{{bubbles:true,clientX:tx,clientY:ty,dataTransfer:dt}}));
+                    t.dispatchEvent(new DragEvent('drop',{{bubbles:true,clientX:tx,clientY:ty,dataTransfer:dt}}));
+                    s.dispatchEvent(new DragEvent('dragend',{{bubbles:true,clientX:tx,clientY:ty,dataTransfer:dt}}));
+                    return null;
+                }})()"#, src=src, tgt=tgt
+            )).await
+        }
+        Command::SetInputFiles { selector, files } => {
+            let s = json_str(&selector);
+            let files_json: Vec<String> = files.iter().map(|f| {
+                format!(r#"{{"name":{},"mime":{},"b64":{}}}"#,
+                    json_str(&f.name), json_str(&f.mime_type), json_str(&f.base64))
+            }).collect();
+            let arr = format!("[{}]", files_json.join(","));
+            eval_js(pending, queue, &format!(
+                r#"(function(){{
+                    var el=document.querySelector({s}); if(!el) throw new Error('not found: '+{s});
+                    var files={arr};
+                    var dt=new DataTransfer();
+                    for(var i=0;i<files.length;i++){{
+                        var f=files[i];
+                        var bin=atob(f.b64);
+                        var bytes=new Uint8Array(bin.length);
+                        for(var j=0;j<bin.length;j++) bytes[j]=bin.charCodeAt(j);
+                        dt.items.add(new File([bytes],f.name,{{type:f.mime}}));
+                    }}
+                    el.files=dt.files;
+                    el.dispatchEvent(new Event('change',{{bubbles:true}}));
+                    return el.files.length;
+                }})()"#, s=s, arr=arr
+            )).await
+        }
+        Command::InstallDialogHandler { default_confirm, default_prompt_text } => {
+            let confirm_val = if default_confirm { "true" } else { "false" };
+            let prompt_val = match &default_prompt_text {
+                Some(t) => json_str(t),
+                None => "null".to_string(),
+            };
+            eval_js(pending, queue, &format!(
+                r#"(function(){{
+                    window.__pw_dialogs=window.__pw_dialogs||[];
+                    window.__pw_confirm_val={cv};
+                    window.__pw_prompt_val={pv};
+                    window.alert=function(m){{ window.__pw_dialogs.push({{type:'alert',message:String(m)}}); }};
+                    window.confirm=function(m){{ window.__pw_dialogs.push({{type:'confirm',message:String(m)}}); return window.__pw_confirm_val; }};
+                    window.prompt=function(m,d){{ window.__pw_dialogs.push({{type:'prompt',message:String(m),default:d||''}}); return window.__pw_prompt_val; }};
+                    return true;
+                }})()"#, cv=confirm_val, pv=prompt_val
+            )).await
+        }
+        Command::GetDialogs => {
+            eval_js(pending, queue, "window.__pw_dialogs||[]").await
+        }
+        Command::ClearDialogs => {
+            eval_js(pending, queue, "(function(){ window.__pw_dialogs=[]; return null; })()").await
+        }
+        Command::AddNetworkRoute { pattern, status, body, content_type } => {
+            let p = json_str(&pattern);
+            let b = json_str(&body);
+            let ct = json_str(content_type.as_deref().unwrap_or("application/json"));
+            eval_js(pending, queue, &format!(
+                r#"(function(){{
+                    if(!window.__pw_routes){{
+                        window.__pw_routes=[];
+                        window.__pw_net_requests=[];
+                        var origFetch=window.fetch;
+                        window.fetch=function(input,init){{
+                            var url=typeof input==='string'?input:(input&&input.url?input.url:'');
+                            var method=(init&&init.method)||'GET';
+                            window.__pw_net_requests.push({{url:url,method:method,timestamp:Date.now()}});
+                            for(var i=0;i<window.__pw_routes.length;i++){{
+                                var r=window.__pw_routes[i];
+                                if(url.includes(r.pattern)||new RegExp(r.pattern).test(url)){{
+                                    return Promise.resolve(new Response(r.body,{{status:r.status,headers:{{'Content-Type':r.ct}}}}));
+                                }}
+                            }}
+                            return origFetch.apply(this,arguments);
+                        }};
+                        var origOpen=XMLHttpRequest.prototype.open;
+                        var origSend=XMLHttpRequest.prototype.send;
+                        XMLHttpRequest.prototype.open=function(m,u){{
+                            this.__pw_method=m;this.__pw_url=u;
+                            return origOpen.apply(this,arguments);
+                        }};
+                        XMLHttpRequest.prototype.send=function(){{
+                            var self=this;
+                            window.__pw_net_requests.push({{url:self.__pw_url,method:self.__pw_method,timestamp:Date.now()}});
+                            for(var i=0;i<window.__pw_routes.length;i++){{
+                                var r=window.__pw_routes[i];
+                                if(self.__pw_url&&(self.__pw_url.includes(r.pattern)||new RegExp(r.pattern).test(self.__pw_url))){{
+                                    Object.defineProperty(self,'status',{{get:function(){{return r.status}}}});
+                                    Object.defineProperty(self,'responseText',{{get:function(){{return r.body}}}});
+                                    Object.defineProperty(self,'response',{{get:function(){{return r.body}}}});
+                                    Object.defineProperty(self,'readyState',{{get:function(){{return 4}}}});
+                                    setTimeout(function(){{self.onreadystatechange&&self.onreadystatechange();self.onload&&self.onload();}},0);
+                                    return;
+                                }}
+                            }}
+                            return origSend.apply(this,arguments);
+                        }};
+                    }}
+                    window.__pw_routes.push({{pattern:{p},status:{st},body:{b},ct:{ct}}});
+                    return window.__pw_routes.length;
+                }})()"#, p=p, st=status, b=b, ct=ct
+            )).await
+        }
+        Command::RemoveNetworkRoute { pattern } => {
+            let p = json_str(&pattern);
+            eval_js(pending, queue, &format!(
+                r#"(function(){{ if(!window.__pw_routes) return 0; window.__pw_routes=window.__pw_routes.filter(function(r){{return r.pattern!=={p}}}); return window.__pw_routes.length; }})()"#, p=p
+            )).await
+        }
+        Command::ClearNetworkRoutes => {
+            eval_js(pending, queue, "(function(){ window.__pw_routes=[]; return null; })()").await
+        }
+        Command::GetNetworkRequests => {
+            eval_js(pending, queue, "window.__pw_net_requests||[]").await
+        }
+        Command::ClearNetworkRequests => {
+            eval_js(pending, queue, "(function(){ window.__pw_net_requests=[]; return null; })()").await
+        }
         Command::Title => eval_js(pending, queue, "document.title").await,
         Command::Url => eval_js(pending, queue, "window.location.href").await,
         Command::Goto { url } => {
@@ -292,6 +540,41 @@ async fn execute_command(
         }
         Command::NativeScreenshot { path } => {
             take_native_screenshot(path).await
+        }
+        Command::StartRecording { path, fps } => {
+            let mut rec = recording.lock().await;
+            if rec.is_some() {
+                return Response::err("recording already in progress");
+            }
+            match RecordingSession::start(path, fps) {
+                Ok(session) => {
+                    let dir = session.output_dir.clone();
+                    *rec = Some(session);
+                    Response::ok(serde_json::json!({ "dir": dir, "fps": fps }))
+                }
+                Err(e) => Response::err(e),
+            }
+        }
+        Command::StopRecording => {
+            let mut rec = recording.lock().await;
+            match rec.take() {
+                Some(mut session) => {
+                    let fps = session.fps;
+                    let (dir, frame_count) = session.stop().await;
+
+                    // Try to stitch into video with ffmpeg
+                    let video_path = format!("{}/video.mp4", dir);
+                    let video = session.stitch(&video_path).await.ok();
+
+                    Response::ok(serde_json::json!({
+                        "dir": dir,
+                        "frame_count": frame_count,
+                        "fps": fps,
+                        "video": video,
+                    }))
+                }
+                None => Response::err("no recording in progress"),
+            }
         }
     }
 }

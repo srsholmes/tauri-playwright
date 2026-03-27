@@ -25,8 +25,11 @@ export default defineConfig({
       use: {
         // @ts-expect-error — custom fixture option
         mode: 'tauri',
-        trace: 'on',
-        // Disable Playwright's built-in screenshot — we capture native screenshots
+        // Traces and screenshots are useless in Tauri mode — they capture the
+        // blank Playwright browser page, not the real Tauri webview.
+        // Native screenshots are captured via CoreGraphics and attached to
+        // the HTML report by the fixture on test failure.
+        trace: 'off',
         screenshot: 'off',
       },
     },

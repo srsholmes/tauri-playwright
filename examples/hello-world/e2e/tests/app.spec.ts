@@ -2,13 +2,14 @@ import { test, expect } from '../fixtures';
 
 test.describe('App', () => {
   test('renders the main heading', async ({ tauriPage }) => {
-    await expect(tauriPage.locator('[data-testid="heading"]')).toContainText('Hello, Tauri Playwright!');
+    const text = await tauriPage.textContent('[data-testid="heading"]');
+    expect(text).toContain('Hello, Tauri Playwright!');
   });
 
   test('has all sections', async ({ tauriPage }) => {
-    await expect(tauriPage.locator('[data-testid="counter-section"]')).toBeVisible();
-    await expect(tauriPage.locator('[data-testid="greet-section"]')).toBeVisible();
-    await expect(tauriPage.locator('[data-testid="todo-section"]')).toBeVisible();
-    await expect(tauriPage.locator('[data-testid="modal-section"]')).toBeVisible();
+    expect(await tauriPage.isVisible('[data-testid="counter-section"]')).toBe(true);
+    expect(await tauriPage.isVisible('[data-testid="greet-section"]')).toBe(true);
+    expect(await tauriPage.isVisible('[data-testid="todo-section"]')).toBe(true);
+    expect(await tauriPage.isVisible('[data-testid="modal-section"]')).toBe(true);
   });
 });

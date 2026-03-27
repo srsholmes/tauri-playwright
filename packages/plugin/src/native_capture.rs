@@ -290,4 +290,134 @@ pub mod platform {
     pub fn screenshot() -> Result<Vec<u8>, String> {
         Err("native screenshot not yet supported on this platform".into())
     }
+
+    pub fn find_window_id(_pid: u32) -> Result<u32, String> {
+        Err("not supported on this platform".into())
+    }
+
+    pub fn capture_window_png(_window_id: u32) -> Result<Vec<u8>, String> {
+        Err("not supported on this platform".into())
+    }
+}
+
+// ── Video recording via frame capture ───────────────────────────────────────
+
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::sync::Arc;
+
+pub struct RecordingSession {
+    cancel: Arc<AtomicBool>,
+    handle: Option<tauri::async_runtime::JoinHandle<()>>,
+    pub output_dir: String,
+    pub frame_count: Arc<AtomicU32>,
+    pub fps: u32,
+}
+
+impl RecordingSession {
+    /// Start capturing frames to `output_dir` at the given FPS.
+    pub fn start(output_dir: String, fps: u32) -> Result<Self, String> {
+        let pid = std::process::id();
+        let window_id = platform::find_window_id(pid)?;
+
+        std::fs::create_dir_all(&output_dir)
+            .map_err(|e| format!("create dir: {}", e))?;
+
+        let cancel = Arc::new(AtomicBool::new(false));
+        let frame_count = Arc::new(AtomicU32::new(0));
+        let cancel_c = Arc::clone(&cancel);
+        let frame_count_c = Arc::clone(&frame_count);
+        let dir = output_dir.clone();
+        let interval = std::time::Duration::from_millis(1000 / fps.max(1) as u64);
+
+        let handle = tauri::async_runtime::spawn(async move {
+            loop {
+                if cancel_c.load(Ordering::Relaxed) {
+                    break;
+                }
+
+                let n = frame_count_c.fetch_add(1, Ordering::SeqCst);
+                let dir2 = dir.clone();
+
+                let result = tokio::task::spawn_blocking(move || {
+                    platform::capture_window_png(window_id)
+                })
+                .await;
+
+                match result {
+                    Ok(Ok(png)) => {
+                        let path = format!("{}/frame_{:06}.png", dir2, n);
+                        if let Err(e) = tokio::fs::write(&path, &png).await {
+                            eprintln!("tauri-plugin-playwright: frame write error: {}", e);
+                        }
+                    }
+                    Ok(Err(e)) => {
+                        eprintln!("tauri-plugin-playwright: frame capture error: {}", e);
+                    }
+                    Err(e) => {
+                        eprintln!("tauri-plugin-playwright: spawn error: {}", e);
+                    }
+                }
+
+                tokio::time::sleep(interval).await;
+            }
+        });
+
+        eprintln!(
+            "tauri-plugin-playwright: recording started dir={} fps={} window={}",
+            output_dir, fps, window_id
+        );
+
+        Ok(Self {
+            cancel,
+            handle: Some(handle),
+            output_dir,
+            frame_count,
+            fps,
+        })
+    }
+
+    /// Stop recording. Returns (output_dir, frame_count).
+    pub async fn stop(&mut self) -> (String, u32) {
+        self.cancel.store(true, Ordering::Relaxed);
+        if let Some(h) = self.handle.take() {
+            let _ = h.await;
+        }
+        let count = self.frame_count.load(Ordering::SeqCst);
+        eprintln!(
+            "tauri-plugin-playwright: recording stopped, {} frames in {}",
+            count, self.output_dir
+        );
+        (self.output_dir.clone(), count)
+    }
+
+    /// Stitch frames into a video using ffmpeg (if available).
+    pub async fn stitch(&self, output_path: &str) -> Result<String, String> {
+        let result = tokio::process::Command::new("ffmpeg")
+            .args([
+                "-y",
+                "-framerate",
+                &self.fps.to_string(),
+                "-i",
+                &format!("{}/frame_%06d.png", self.output_dir),
+                "-c:v",
+                "libx264",
+                "-pix_fmt",
+                "yuv420p",
+                "-movflags",
+                "+faststart",
+                output_path,
+            ])
+            .output()
+            .await
+            .map_err(|e| format!("ffmpeg not found or failed to start: {}", e))?;
+
+        if result.status.success() {
+            let path = output_path.to_string();
+            eprintln!("tauri-plugin-playwright: video saved to {}", path);
+            Ok(path)
+        } else {
+            let stderr = String::from_utf8_lossy(&result.stderr);
+            Err(format!("ffmpeg failed: {}", stderr))
+        }
+    }
 }

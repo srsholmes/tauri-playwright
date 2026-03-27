@@ -70,10 +70,41 @@ export function createTauriTest(config: TauriTestConfig) {
 
           tauriPage = new TauriPage(client);
 
+          // Reset app state by reloading the page before each test
+          if (config.devUrl) {
+            await tauriPage.evaluate(`window.location.href = ${JSON.stringify(config.devUrl)}`);
+            // Wait for the page to load
+            await new Promise(r => setTimeout(r, 300));
+            await tauriPage.waitForFunction('document.readyState === "complete"');
+          }
+
+          // Start recording before the test runs
+          let recordingDir: string | null = null;
+          try {
+            const rec = await tauriPage.startRecording({
+              path: testInfo.outputPath('recording'),
+              fps: 15,
+            });
+            recordingDir = rec.dir;
+          } catch {
+            // Recording failed to start — non-fatal
+          }
+
           await use(tauriPage as unknown as TauriFixtures['tauriPage']);
 
-          // After test: capture native screenshot on failure and attach to report
+          // After test: stop recording and capture screenshot on failure
+          let videoPath: string | null = null;
+          if (recordingDir) {
+            try {
+              const result = await tauriPage.stopRecording();
+              videoPath = result.video;
+            } catch {
+              // Stop failed — non-fatal
+            }
+          }
+
           if (testInfo.status !== testInfo.expectedStatus) {
+            // Attach native screenshot
             try {
               const screenshotBuffer = await tauriPage.screenshot();
               if (screenshotBuffer.length > 0) {
@@ -83,7 +114,21 @@ export function createTauriTest(config: TauriTestConfig) {
                 });
               }
             } catch {
-              // Native screenshot failed — non-fatal, test result stands
+              // Screenshot failed — non-fatal
+            }
+          }
+
+          // Attach video if available (on failure or always, depending on config)
+          if (videoPath) {
+            try {
+              const { readFile } = await import('node:fs/promises');
+              const videoBuffer = await readFile(videoPath);
+              await testInfo.attach('video', {
+                body: videoBuffer,
+                contentType: 'video/mp4',
+              });
+            } catch {
+              // Video attach failed — non-fatal
             }
           }
         } finally {

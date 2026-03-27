@@ -8,6 +8,9 @@ export default function App() {
   const [items, setItems] = useState<string[]>([]);
   const [newItem, setNewItem] = useState('');
   const [showModal, setShowModal] = useState(false);
+  const [uploadedFile, setUploadedFile] = useState('');
+  const [dialogResult, setDialogResult] = useState('');
+  const [dragResult, setDragResult] = useState('');
 
   const handleGreet = async () => {
     try {
@@ -117,6 +120,64 @@ export default function App() {
         <p data-testid="todo-count" style={{ marginTop: 8, color: '#888' }}>
           {items.length} item{items.length !== 1 ? 's' : ''}
         </p>
+      </section>
+
+      {/* File Upload Section */}
+      <section data-testid="upload-section" style={{ marginTop: 32 }}>
+        <h2>File Upload</h2>
+        <input
+          data-testid="file-input"
+          type="file"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            setUploadedFile(file ? `${file.name} (${file.size} bytes)` : '');
+          }}
+        />
+        {uploadedFile && <p data-testid="upload-result">{uploadedFile}</p>}
+      </section>
+
+      {/* Dialog Section */}
+      <section data-testid="dialog-section" style={{ marginTop: 32 }}>
+        <h2>Dialogs</h2>
+        <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+          <button data-testid="btn-alert" onClick={() => { alert('Hello from alert!'); setDialogResult('alert fired'); }}>
+            Alert
+          </button>
+          <button data-testid="btn-confirm" onClick={() => { const r = confirm('Are you sure?'); setDialogResult(`confirm: ${r}`); }}>
+            Confirm
+          </button>
+          <button data-testid="btn-prompt" onClick={() => { const r = prompt('Enter name:', 'default'); setDialogResult(`prompt: ${r}`); }}>
+            Prompt
+          </button>
+        </div>
+        {dialogResult && <p data-testid="dialog-result">{dialogResult}</p>}
+      </section>
+
+      {/* Drag and Drop Section */}
+      <section data-testid="drag-section" style={{ marginTop: 32 }}>
+        <h2>Drag & Drop</h2>
+        <div style={{ display: 'flex', gap: 16, marginTop: 8 }}>
+          <div
+            data-testid="drag-source"
+            draggable
+            onDragStart={(e) => e.dataTransfer.setData('text/plain', 'dragged-item')}
+            style={{ padding: 16, background: '#333', borderRadius: 4, cursor: 'grab' }}
+          >
+            Drag me
+          </div>
+          <div
+            data-testid="drop-target"
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={(e) => {
+              e.preventDefault();
+              setDragResult('Dropped: ' + e.dataTransfer.getData('text/plain'));
+            }}
+            style={{ padding: 16, background: '#222', borderRadius: 4, border: '2px dashed #555', minWidth: 120 }}
+          >
+            {dragResult || 'Drop here'}
+          </div>
+        </div>
+        {dragResult && <p data-testid="drag-result">{dragResult}</p>}
       </section>
 
       {/* Modal Section */}

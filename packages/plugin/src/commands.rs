@@ -78,6 +78,110 @@ pub enum Command {
         url: String,
     },
 
+    /// Get innerHTML of an element
+    InnerHtml { selector: String },
+
+    /// Get innerText of an element (visible text only)
+    InnerText { selector: String },
+
+    /// Get textContent of all matching elements
+    AllTextContents { selector: String },
+
+    /// Get innerText of all matching elements
+    AllInnerTexts { selector: String },
+
+    /// Check if an element is checked (checkbox/radio)
+    IsChecked { selector: String },
+
+    /// Check if an element is disabled
+    IsDisabled { selector: String },
+
+    /// Check if an element is editable
+    IsEditable { selector: String },
+
+    /// Get the bounding box of an element
+    BoundingBox { selector: String },
+
+    /// Hover over an element
+    Hover { selector: String },
+
+    /// Double-click an element
+    Dblclick { selector: String },
+
+    /// Check a checkbox or radio
+    Check { selector: String },
+
+    /// Uncheck a checkbox
+    Uncheck { selector: String },
+
+    /// Select an option from a <select> element
+    SelectOption { selector: String, value: String },
+
+    /// Focus an element
+    Focus { selector: String },
+
+    /// Blur (unfocus) an element
+    Blur { selector: String },
+
+    /// Wait for a JS expression to return truthy
+    WaitForFunction {
+        expression: String,
+        #[serde(default = "default_timeout")]
+        timeout_ms: u64,
+    },
+
+    /// Get the full page HTML
+    Content,
+
+    /// Drag one element onto another
+    DragAndDrop {
+        source: String,
+        target: String,
+    },
+
+    /// Set files on a file input element (base64-encoded file contents)
+    SetInputFiles {
+        selector: String,
+        files: Vec<FilePayload>,
+    },
+
+    /// Install dialog handlers (alert/confirm/prompt interception)
+    InstallDialogHandler {
+        #[serde(default)]
+        default_confirm: bool,
+        #[serde(default)]
+        default_prompt_text: Option<String>,
+    },
+
+    /// Get captured dialogs since last check
+    GetDialogs,
+
+    /// Clear captured dialogs
+    ClearDialogs,
+
+    /// Add a network route (intercept fetch/XHR matching a URL pattern)
+    AddNetworkRoute {
+        pattern: String,
+        status: u16,
+        body: String,
+        #[serde(default)]
+        content_type: Option<String>,
+    },
+
+    /// Remove a network route
+    RemoveNetworkRoute {
+        pattern: String,
+    },
+
+    /// Clear all network routes
+    ClearNetworkRoutes,
+
+    /// Get captured network requests
+    GetNetworkRequests,
+
+    /// Clear captured network requests
+    ClearNetworkRequests,
+
     /// Take a screenshot of the webview (returned as base64 PNG)
     Screenshot {
         /// Optional: save to this file path instead of returning base64
@@ -92,6 +196,31 @@ pub enum Command {
         #[serde(default)]
         path: Option<String>,
     },
+
+    /// Start recording the window as a video (native frame capture).
+    StartRecording {
+        /// Directory to store frames (created if needed).
+        path: String,
+        /// Frames per second (default: 10).
+        #[serde(default = "default_fps")]
+        fps: u32,
+    },
+
+    /// Stop recording and optionally stitch into a video file.
+    StopRecording,
+}
+
+fn default_fps() -> u32 {
+    10
+}
+
+/// A file to set on a file input element.
+#[derive(Debug, Deserialize)]
+pub struct FilePayload {
+    pub name: String,
+    pub mime_type: String,
+    /// Base64-encoded file content.
+    pub base64: String,
 }
 
 /// Response sent back to the Playwright test runner.

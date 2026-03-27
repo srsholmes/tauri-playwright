@@ -1,11 +1,9 @@
 import { test, expect } from '../fixtures';
-import { writeFileSync } from 'node:fs';
 
 test.describe('Screenshot & Trace', () => {
   test('explicit native screenshot', async ({ tauriPage }) => {
     const buf = await (tauriPage as any).screenshot();
-    writeFileSync('/tmp/playwright-tauri-explicit.png', buf);
-    test.info().attach('native-screenshot', {
+    await test.info().attach('native-screenshot', {
       body: buf,
       contentType: 'image/png',
     });
@@ -13,9 +11,9 @@ test.describe('Screenshot & Trace', () => {
   });
 
   test('should fail - wrong heading text', async ({ tauriPage }) => {
-    // Also take an explicit screenshot before the assertion for the report
+    // Capture native screenshot before the assertion fails
     const buf = await (tauriPage as any).screenshot();
-    test.info().attach('before-failure', {
+    await test.info().attach('before-failure', {
       body: buf,
       contentType: 'image/png',
     });

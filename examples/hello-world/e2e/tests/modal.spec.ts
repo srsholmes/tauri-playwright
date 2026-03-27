@@ -1,32 +1,36 @@
 import { test, expect } from '../fixtures';
 
 test.describe('Modal', () => {
+  test('is not visible by default', async ({ tauriPage }) => {
+    expect(await tauriPage.isVisible('[data-testid="modal"]')).toBe(false);
+    expect(await tauriPage.isVisible('[data-testid="modal-backdrop"]')).toBe(false);
+  });
+
   test('opens when clicking Open Modal button', async ({ tauriPage }) => {
     await tauriPage.click('[data-testid="btn-open-modal"]');
+    await tauriPage.waitForSelector('[data-testid="modal"]');
 
-    await expect(tauriPage.locator('[data-testid="modal"]')).toBeVisible();
-    await expect(tauriPage.locator('[data-testid="modal"]')).toContainText('Modal Title');
+    expect(await tauriPage.isVisible('[data-testid="modal"]')).toBe(true);
+    const text = await tauriPage.textContent('[data-testid="modal"]');
+    expect(text).toContain('Modal Title');
   });
 
   test('closes when clicking Close button', async ({ tauriPage }) => {
     await tauriPage.click('[data-testid="btn-open-modal"]');
-    await expect(tauriPage.locator('[data-testid="modal"]')).toBeVisible();
+    await tauriPage.waitForSelector('[data-testid="modal"]');
+    expect(await tauriPage.isVisible('[data-testid="modal"]')).toBe(true);
 
     await tauriPage.click('[data-testid="btn-close-modal"]');
-    await expect(tauriPage.locator('[data-testid="modal"]')).not.toBeVisible();
+    await tauriPage.waitForFunction("!document.querySelector('[data-testid=\"modal\"]')");
+    expect(await tauriPage.isHidden('[data-testid="modal"]')).toBe(true);
   });
 
   test('closes when clicking backdrop', async ({ tauriPage }) => {
     await tauriPage.click('[data-testid="btn-open-modal"]');
-    await expect(tauriPage.locator('[data-testid="modal"]')).toBeVisible();
+    await tauriPage.waitForSelector('[data-testid="modal-backdrop"]');
 
-    // Click the backdrop at the edge (not on the modal itself)
-    await tauriPage.locator('[data-testid="modal-backdrop"]').click({ position: { x: 5, y: 5 } });
-    await expect(tauriPage.locator('[data-testid="modal"]')).not.toBeVisible();
-  });
-
-  test('is not visible by default', async ({ tauriPage }) => {
-    await expect(tauriPage.locator('[data-testid="modal"]')).not.toBeVisible();
-    await expect(tauriPage.locator('[data-testid="modal-backdrop"]')).not.toBeVisible();
+    await tauriPage.click('[data-testid="modal-backdrop"]');
+    await tauriPage.waitForFunction("!document.querySelector('[data-testid=\"modal-backdrop\"]')");
+    expect(await tauriPage.isHidden('[data-testid="modal-backdrop"]')).toBe(true);
   });
 });
