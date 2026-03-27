@@ -11,6 +11,9 @@ export default function App() {
   const [uploadedFile, setUploadedFile] = useState('');
   const [dialogResult, setDialogResult] = useState('');
   const [dragResult, setDragResult] = useState('');
+  const [apiData, setApiData] = useState<string[]>([]);
+  const [apiLoading, setApiLoading] = useState(false);
+  const [apiError, setApiError] = useState('');
 
   const handleGreet = async () => {
     try {
@@ -120,6 +123,43 @@ export default function App() {
         <p data-testid="todo-count" style={{ marginTop: 8, color: '#888' }}>
           {items.length} item{items.length !== 1 ? 's' : ''}
         </p>
+      </section>
+
+      {/* API Fetch Section */}
+      <section data-testid="api-section" style={{ marginTop: 32 }}>
+        <h2>API Data</h2>
+        <button
+          data-testid="btn-fetch-api"
+          onClick={async () => {
+            setApiLoading(true);
+            setApiError('');
+            try {
+              const resp = await fetch('/api/users');
+              if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+              const data = await resp.json();
+              setApiData(data.users || []);
+            } catch (e) {
+              setApiError(String(e));
+              setApiData([]);
+            } finally {
+              setApiLoading(false);
+            }
+          }}
+        >
+          Fetch Users
+        </button>
+        {apiLoading && <p data-testid="api-loading">Loading...</p>}
+        {apiError && <p data-testid="api-error" style={{ color: '#ef4444' }}>{apiError}</p>}
+        {apiData.length > 0 && (
+          <ul data-testid="api-list">
+            {apiData.map((user, i) => (
+              <li key={i} data-testid={`api-user-${i}`}>{user}</li>
+            ))}
+          </ul>
+        )}
+        {!apiLoading && !apiError && apiData.length === 0 && (
+          <p data-testid="api-empty" style={{ color: '#666' }}>No data yet. Click Fetch Users.</p>
+        )}
       </section>
 
       {/* File Upload Section */}

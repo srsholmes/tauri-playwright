@@ -65,38 +65,54 @@ test.describe('Advanced Features', () => {
     expect(result).toContain('prompt: Claude');
   });
 
-  test('network mocking — route and intercept fetch', async ({ tauriPage }) => {
-    // Install a mock route
-    await (tauriPage as any).route('/api/data', {
+  test('network mocking — mock API response shown in UI', async ({ tauriPage }) => {
+    // The app has a "Fetch Users" button that calls GET /api/users.
+    // No real server exists — mock it so the UI renders the mocked data.
+
+    await (tauriPage as any).route('/api/users', {
       status: 200,
-      body: JSON.stringify({ items: ['mocked-item-1', 'mocked-item-2'] }),
+      body: JSON.stringify({ users: ['Alice', 'Bob', 'Charlie'] }),
       contentType: 'application/json',
     });
 
-    // Make a fetch call from the webview and verify it's intercepted
-    const result = await tauriPage.evaluate<{ items: string[] }>(
-      "fetch('/api/data').then(r => r.json())"
-    );
-    expect(result.items).toEqual(['mocked-item-1', 'mocked-item-2']);
+    // Click the Fetch Users button in the UI
+    await tauriPage.click('[data-testid="btn-fetch-api"]');
 
-    // Check captured network requests
+    // Wait for the list to appear with mocked data
+    await tauriPage.waitForSelector('[data-testid="api-list"]');
+
+    // Assert each mocked user appears in the UI
+    const user0 = await tauriPage.textContent('[data-testid="api-user-0"]');
+    expect(user0).toBe('Alice');
+
+    const user1 = await tauriPage.textContent('[data-testid="api-user-1"]');
+    expect(user1).toBe('Bob');
+
+    const user2 = await tauriPage.textContent('[data-testid="api-user-2"]');
+    expect(user2).toBe('Charlie');
+
+    // Verify all 3 items rendered
+    const allUsers = await tauriPage.allTextContents('[data-testid^="api-user-"]');
+    expect(allUsers).toEqual(['Alice', 'Bob', 'Charlie']);
+
+    // Check captured network requests include our call
     const requests = await (tauriPage as any).getNetworkRequests();
-    const apiCall = requests.find((r: any) => r.url.includes('/api/data'));
+    const apiCall = requests.find((r: any) => r.url.includes('/api/users'));
     expect(apiCall).toBeTruthy();
     expect(apiCall.method).toBe('GET');
 
-    // Mock a different status
-    await (tauriPage as any).route('/api/error', {
+    // Now mock an error response and verify the UI shows the error
+    await (tauriPage as any).clearRoutes();
+    await (tauriPage as any).route('/api/users', {
       status: 500,
-      body: JSON.stringify({ error: 'Server Error' }),
+      body: JSON.stringify({ error: 'Internal Server Error' }),
     });
-    const errorResult = await tauriPage.evaluate<number>(
-      "fetch('/api/error').then(r => r.status)"
-    );
-    expect(errorResult).toBe(500);
 
-    // Remove route
-    await (tauriPage as any).unroute('/api/data');
+    await tauriPage.click('[data-testid="btn-fetch-api"]');
+    await tauriPage.waitForSelector('[data-testid="api-error"]');
+
+    const errorText = await tauriPage.textContent('[data-testid="api-error"]');
+    expect(errorText).toContain('500');
 
     // Clean up
     await (tauriPage as any).clearRoutes();
