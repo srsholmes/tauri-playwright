@@ -136,7 +136,9 @@ export default function App() {
             try {
               const resp = await fetch('/api/users');
               if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-              const data = await resp.json();
+              const text = await resp.text();
+              let data;
+              try { data = JSON.parse(text); } catch { throw new Error('Not JSON — is the network mock installed?'); }
               setApiData(data.users || []);
             } catch (e) {
               setApiError(String(e));

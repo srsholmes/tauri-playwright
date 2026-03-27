@@ -165,7 +165,8 @@ test.describe('Kitchen Sink — Full Tauri E2E', () => {
     // Open and close via backdrop
     await tauriPage.click('[data-testid="btn-open-modal"]');
     await tauriPage.waitForSelector('[data-testid="modal-backdrop"]');
-    await tauriPage.click('[data-testid="modal-backdrop"]');
+    // Click the backdrop edge (not center, which would hit the modal content)
+    await tauriPage.evaluate("document.querySelector('[data-testid=\"modal-backdrop\"]').click()");
     await tauriPage.waitForFunction(
       "!document.querySelector('[data-testid=\"modal-backdrop\"]')"
     );

@@ -2,6 +2,7 @@ import { test as base, type Page, type TestInfo } from '@playwright/test';
 import { generateIpcMockScript } from './ipc-mock.js';
 import { PluginClient } from './socket-client.js';
 import { TauriPage } from './tauri-page.js';
+import { BrowserPageAdapter } from './browser-page-adapter.js';
 import { TauriProcessManager } from './process-manager.js';
 import type { TauriTestConfig, TestMode, TauriFixtures, CapturedInvoke } from './types.js';
 
@@ -30,7 +31,8 @@ export function createTauriTest(config: TauriTestConfig) {
 
         await page.goto(config.devUrl);
         await page.waitForLoadState('networkidle');
-        await use(page as unknown as TauriFixtures['tauriPage']);
+        const adapter = new BrowserPageAdapter(page);
+        await use(adapter as unknown as TauriFixtures['tauriPage']);
       } else {
         // Tauri mode: connect to the real Tauri app via the plugin socket
         let processManager: TauriProcessManager | null = null;
