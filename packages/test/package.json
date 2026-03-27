@@ -1,5 +1,5 @@
 {
-  "name": "@tauri-playwright/test",
+  "name": "@srsholmes/tauri-playwright",
   "version": "0.1.0",
   "description": "Playwright E2E testing for Tauri desktop apps",
   "type": "module",

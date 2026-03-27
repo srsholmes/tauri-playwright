@@ -1,5 +1,5 @@
 import { test, expect } from '../fixtures';
-import { getCapturedInvokes, clearCapturedInvokes } from '@tauri-playwright/test';
+import { getCapturedInvokes, clearCapturedInvokes } from '@srsholmes/tauri-playwright';
 
 test.describe('Greet (Tauri IPC)', () => {
   test('shows greeting when clicking Greet button', async ({ tauriPage }) => {

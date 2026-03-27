@@ -290,6 +290,9 @@ async fn execute_command(
         Command::Screenshot { path } => {
             take_screenshot(pending, queue, path).await
         }
+        Command::NativeScreenshot { path } => {
+            take_native_screenshot(path).await
+        }
     }
 }
 
@@ -437,6 +440,36 @@ async fn take_screenshot(
     }
 
     Response::err("unexpected screenshot result format".to_string())
+}
+
+/// Native screenshot via platform APIs (CoreGraphics on macOS).
+async fn take_native_screenshot(path: Option<String>) -> Response {
+    let result = tokio::task::spawn_blocking(|| {
+        crate::native_capture::platform::screenshot()
+    })
+    .await;
+
+    match result {
+        Ok(Ok(png_bytes)) => {
+            if let Some(ref file_path) = path {
+                if let Err(e) = tokio::fs::write(file_path, &png_bytes).await {
+                    return Response::err(format!("write file: {}", e));
+                }
+                Response::ok(serde_json::json!({
+                    "path": file_path,
+                    "size": png_bytes.len()
+                }))
+            } else {
+                let base64 = crate::native_capture::base64_encode(&png_bytes);
+                Response::ok(serde_json::json!({
+                    "base64": base64,
+                    "size": png_bytes.len()
+                }))
+            }
+        }
+        Ok(Err(e)) => Response::err(e),
+        Err(e) => Response::err(format!("capture thread error: {}", e)),
+    }
 }
 
 fn base64_decode(input: &str) -> Result<Vec<u8>, String> {

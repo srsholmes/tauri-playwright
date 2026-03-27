@@ -25,6 +25,6 @@
     "typescript": "^5.7.2",
     "vite": "^6.0.7",
     "@playwright/test": "^1.52.0",
-    "@tauri-playwright/test": "workspace:*"
+    "@srsholmes/tauri-playwright": "workspace:*"
   }
 }

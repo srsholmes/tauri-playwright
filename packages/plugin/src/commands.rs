@@ -84,6 +84,14 @@ pub enum Command {
         #[serde(default)]
         path: Option<String>,
     },
+
+    /// Native screenshot via platform APIs (CoreGraphics on macOS).
+    /// Captures the actual window pixels including native chrome.
+    NativeScreenshot {
+        /// Optional: save to this file path instead of returning base64
+        #[serde(default)]
+        path: Option<String>,
+    },
 }
 
 /// Response sent back to the Playwright test runner.

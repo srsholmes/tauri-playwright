@@ -1,3 +1,4 @@
+import { Buffer } from 'node:buffer';
 import { PluginClient, type PluginResponse } from './socket-client.js';
 
 /**
@@ -86,6 +87,19 @@ export class TauriPage {
   /** Navigate to a URL. */
   async goto(url: string): Promise<void> {
     await this.command('goto', { url });
+  }
+
+  /** Take a native screenshot of the Tauri window. Returns PNG buffer. */
+  async screenshot(options?: { path?: string }): Promise<Buffer> {
+    const resp = await this.command('native_screenshot', {
+      path: options?.path,
+    });
+    const data = resp.data as Record<string, unknown>;
+    if (options?.path) {
+      // File was written on the Rust side; return the bytes we got back
+      return Buffer.alloc(0);
+    }
+    return Buffer.from(data.base64 as string, 'base64');
   }
 
   /** Create a locator for chained operations. */

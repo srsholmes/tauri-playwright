@@ -1,4 +1,4 @@
-import { test as base, type Page } from '@playwright/test';
+import { test as base, type Page, type TestInfo } from '@playwright/test';
 import { generateIpcMockScript } from './ipc-mock.js';
 import { PluginClient } from './socket-client.js';
 import { TauriPage } from './tauri-page.js';
@@ -13,26 +13,13 @@ import type { TauriTestConfig, TestMode, TauriFixtures, CapturedInvoke } from '.
  *
  * **Tauri mode**: `tauriPage` is a TauriPage backed by the plugin socket bridge.
  * Controls the real Tauri webview (WKWebView/WebView2/WebKitGTK).
- *
- * @example
- * ```ts
- * const { test, expect } = createTauriTest({
- *   devUrl: 'http://localhost:1420',
- *   ipcMocks: { greet: (args) => `Hello, ${args?.name}!` },
- * });
- *
- * test('greets the user', async ({ tauriPage }) => {
- *   await tauriPage.fill('[data-testid="name-input"]', 'World');
- *   await tauriPage.click('[data-testid="btn-greet"]');
- * });
- * ```
  */
 export function createTauriTest(config: TauriTestConfig) {
   const tauriTest = base.extend<TauriFixtures>({
     mode: ['browser', { option: true }],
 
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    tauriPage: async ({ page, mode }, use) => {
+    tauriPage: async ({ page, mode }, use, testInfo: TestInfo) => {
       if (mode === 'browser') {
         // Browser-only mode: mock Tauri IPC and run in Chromium
         if (config.ipcMocks) {
@@ -48,6 +35,7 @@ export function createTauriTest(config: TauriTestConfig) {
         // Tauri mode: connect to the real Tauri app via the plugin socket
         let processManager: TauriProcessManager | null = null;
         let client: PluginClient | null = null;
+        let tauriPage: TauriPage | null = null;
 
         try {
           const socketPath = config.mcpSocket ?? '/tmp/tauri-playwright.sock';
@@ -80,9 +68,24 @@ export function createTauriTest(config: TauriTestConfig) {
             throw new Error('Plugin ping failed');
           }
 
-          const tauriPage = new TauriPage(client);
+          tauriPage = new TauriPage(client);
 
           await use(tauriPage as unknown as TauriFixtures['tauriPage']);
+
+          // After test: capture native screenshot on failure and attach to report
+          if (testInfo.status !== testInfo.expectedStatus) {
+            try {
+              const screenshotBuffer = await tauriPage.screenshot();
+              if (screenshotBuffer.length > 0) {
+                await testInfo.attach('native-screenshot', {
+                  body: screenshotBuffer,
+                  contentType: 'image/png',
+                });
+              }
+            } catch {
+              // Native screenshot failed — non-fatal, test result stands
+            }
+          }
         } finally {
           client?.disconnect();
           processManager?.stop();

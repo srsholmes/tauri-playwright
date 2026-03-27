@@ -8,6 +8,7 @@ use tauri::{
 };
 
 mod commands;
+mod native_capture;
 mod server;
 
 use server::PendingResults;

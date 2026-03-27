@@ -6,13 +6,8 @@ export default defineConfig({
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
   workers: process.env.CI ? 1 : undefined,
-  reporter: process.env.CI ? 'github' : 'html',
+  reporter: [['html', { open: 'never' }]],
   timeout: 30000,
-
-  use: {
-    trace: 'on-first-retry',
-    screenshot: 'only-on-failure',
-  },
 
   projects: [
     {
@@ -21,6 +16,8 @@ export default defineConfig({
         ...devices['Desktop Chrome'],
         // @ts-expect-error — custom fixture option
         mode: 'browser',
+        trace: 'on',
+        screenshot: 'on',
       },
     },
     {
@@ -28,6 +25,9 @@ export default defineConfig({
       use: {
         // @ts-expect-error — custom fixture option
         mode: 'tauri',
+        trace: 'on',
+        // Disable Playwright's built-in screenshot — we capture native screenshots
+        screenshot: 'off',
       },
     },
   ],

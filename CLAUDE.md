@@ -9,8 +9,8 @@ Playwright E2E testing for Tauri desktop apps. Monorepo with a publishable npm p
 ```bash
 pnpm build                              # Build all packages
 pnpm test:e2e                           # Run example app E2E tests
-pnpm --filter @tauri-playwright/test build   # Build the npm package
-pnpm --filter @tauri-playwright/test dev     # Watch mode for the npm package
+pnpm --filter @srsholmes/tauri-playwright build   # Build the npm package
+pnpm --filter @srsholmes/tauri-playwright dev     # Watch mode for the npm package
 ```
 
 ### Example App
@@ -27,7 +27,7 @@ npx playwright test --config e2e/playwright.config.ts --ui  # Playwright UI mode
 
 ```
 packages/
-  test/              # @tauri-playwright/test — npm package (TypeScript)
+  test/              # @srsholmes/tauri-playwright — npm package (TypeScript)
     src/
       fixture.ts     # createTauriTest() — Playwright fixture factory
       ipc-mock.ts    # Tauri IPC mock injection script generator
@@ -43,7 +43,7 @@ examples/
   hello-world/       # Example Tauri 2 app for testing
     src/             # React frontend with counter, greet, todo, modal
     src-tauri/       # Rust backend with greet command
-    e2e/             # Playwright tests using @tauri-playwright/test
+    e2e/             # Playwright tests using @srsholmes/tauri-playwright
 ```
 
 ## Key Design Decisions
