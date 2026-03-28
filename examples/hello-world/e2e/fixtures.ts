@@ -8,7 +8,8 @@ export const { test, expect } = createTauriTest({
   // Browser-only mode config
   devUrl: 'http://localhost:1420',
   ipcMocks: {
-    greet: (args) => `Hello, ${(args as { name?: string })?.name ?? 'stranger'}! You've been greeted from Rust!`,
+    greet: (args) =>
+      `Hello, ${(args as { name?: string })?.name ?? 'stranger'}! You've been greeted from Rust!`,
   },
 
   // Tauri mode config — the plugin socket

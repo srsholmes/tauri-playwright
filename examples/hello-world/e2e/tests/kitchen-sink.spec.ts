@@ -1,7 +1,6 @@
 import { test, expect } from '../fixtures';
 
 test.describe('Kitchen Sink — Full Tauri E2E', () => {
-
   test('page info and content', async ({ tauriPage }) => {
     const title = await tauriPage.title();
     expect(title).toContain('Hello World');
@@ -81,7 +80,7 @@ test.describe('Kitchen Sink — Full Tauri E2E', () => {
     await tauriPage.fill('[data-testid="greet-input"]', 'Enter Key');
     await tauriPage.press('[data-testid="greet-input"]', 'Enter');
     await tauriPage.waitForFunction(
-      "document.querySelector('[data-testid=\"greet-result\"]')?.textContent?.includes('Enter Key')"
+      "document.querySelector('[data-testid=\"greet-result\"]')?.textContent?.includes('Enter Key')",
     );
     const greeting2 = await tauriPage.textContent('[data-testid="greet-result"]');
     expect(greeting2).toContain('Hello, Enter Key!');
@@ -157,19 +156,15 @@ test.describe('Kitchen Sink — Full Tauri E2E', () => {
 
     // Close via button
     await tauriPage.click('[data-testid="btn-close-modal"]');
-    await tauriPage.waitForFunction(
-      "!document.querySelector('[data-testid=\"modal\"]')"
-    );
+    await tauriPage.waitForFunction('!document.querySelector(\'[data-testid="modal"]\')');
     expect(await tauriPage.isHidden('[data-testid="modal"]')).toBe(true);
 
     // Open and close via backdrop
     await tauriPage.click('[data-testid="btn-open-modal"]');
     await tauriPage.waitForSelector('[data-testid="modal-backdrop"]');
     // Click the backdrop edge (not center, which would hit the modal content)
-    await tauriPage.evaluate("document.querySelector('[data-testid=\"modal-backdrop\"]').click()");
-    await tauriPage.waitForFunction(
-      "!document.querySelector('[data-testid=\"modal-backdrop\"]')"
-    );
+    await tauriPage.evaluate('document.querySelector(\'[data-testid="modal-backdrop"]\').click()');
+    await tauriPage.waitForFunction('!document.querySelector(\'[data-testid="modal-backdrop"]\')');
     expect(await tauriPage.isHidden('[data-testid="modal-backdrop"]')).toBe(true);
   });
 
@@ -198,16 +193,16 @@ test.describe('Kitchen Sink — Full Tauri E2E', () => {
 
     // Manipulate DOM directly
     await tauriPage.evaluate(
-      "document.querySelector('[data-testid=\"heading\"]').style.color = 'red'"
+      "document.querySelector('[data-testid=\"heading\"]').style.color = 'red'",
     );
     const color = await tauriPage.evaluate<string>(
-      "getComputedStyle(document.querySelector('[data-testid=\"heading\"]')).color"
+      'getComputedStyle(document.querySelector(\'[data-testid="heading"]\')).color',
     );
     expect(color).toContain('255');
 
     // Reset
     await tauriPage.evaluate(
-      "document.querySelector('[data-testid=\"heading\"]').style.color = ''"
+      "document.querySelector('[data-testid=\"heading\"]').style.color = ''",
     );
   });
 

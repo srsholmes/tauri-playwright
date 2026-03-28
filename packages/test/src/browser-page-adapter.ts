@@ -1,5 +1,5 @@
 import { Buffer } from 'node:buffer';
-import type { Page } from '@playwright/test';
+import type { Page, Dialog, Route } from '@playwright/test';
 
 /**
  * Wraps a Playwright Page to provide the same API surface as TauriPage.
@@ -182,10 +182,9 @@ export class BrowserPageAdapter {
   }
 
   async getComputedStyle(selector: string, property: string): Promise<string> {
-    return this.page.locator(selector).evaluate(
-      (el, prop) => getComputedStyle(el).getPropertyValue(prop),
-      property,
-    );
+    return this.page
+      .locator(selector)
+      .evaluate((el, prop) => getComputedStyle(el).getPropertyValue(prop), property);
   }
 
   async dispatchEvent(selector: string, eventType: string): Promise<void> {
@@ -210,7 +209,7 @@ export class BrowserPageAdapter {
   }
 
   // ── Dialog handling ─────────────────────────────────────────────────
-  private dialogHandler: ((dialog: any) => Promise<void>) | null = null;
+  private dialogHandler: ((dialog: Dialog) => Promise<void>) | null = null;
   private capturedDialogs: Array<{ type: string; message: string; default?: string }> = [];
 
   async installDialogHandler(options?: {
@@ -224,7 +223,7 @@ export class BrowserPageAdapter {
       this.page.removeListener('dialog', this.dialogHandler);
     }
 
-    this.dialogHandler = async (dialog: any) => {
+    this.dialogHandler = async (dialog: Dialog) => {
       this.capturedDialogs.push({
         type: dialog.type(),
         message: dialog.message(),
@@ -242,9 +241,7 @@ export class BrowserPageAdapter {
     this.page.on('dialog', this.dialogHandler);
   }
 
-  async getDialogs(): Promise<
-    Array<{ type: string; message: string; default?: string }>
-  > {
+  async getDialogs(): Promise<Array<{ type: string; message: string; default?: string }>> {
     return this.capturedDialogs;
   }
 
@@ -254,13 +251,13 @@ export class BrowserPageAdapter {
 
   // ── Network mocking ─────────────────────────────────────────────────
   private capturedRequests: Array<{ url: string; method: string; timestamp: number }> = [];
-  private activeRoutes: Array<{ pattern: string; handler: any }> = [];
+  private activeRoutes: Array<{ pattern: string; handler: (route: Route) => Promise<void> }> = [];
 
   async route(
     pattern: string,
     response: { status?: number; body?: string; contentType?: string },
   ): Promise<void> {
-    const handler = async (route: any) => {
+    const handler = async (route: Route) => {
       this.capturedRequests.push({
         url: route.request().url(),
         method: route.request().method(),
@@ -291,9 +288,7 @@ export class BrowserPageAdapter {
     this.activeRoutes = [];
   }
 
-  async getNetworkRequests(): Promise<
-    Array<{ url: string; method: string; timestamp: number }>
-  > {
+  async getNetworkRequests(): Promise<Array<{ url: string; method: string; timestamp: number }>> {
     return this.capturedRequests;
   }
 

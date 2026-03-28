@@ -45,10 +45,10 @@ export default function App() {
         <h2>Counter</h2>
         <p data-testid="counter-value">Count: {count}</p>
         <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-          <button data-testid="btn-decrement" onClick={() => setCount(c => c - 1)}>
+          <button data-testid="btn-decrement" onClick={() => setCount((c) => c - 1)}>
             -
           </button>
-          <button data-testid="btn-increment" onClick={() => setCount(c => c + 1)}>
+          <button data-testid="btn-increment" onClick={() => setCount((c) => c + 1)}>
             +
           </button>
           <button data-testid="btn-reset" onClick={() => setCount(0)}>
@@ -68,7 +68,14 @@ export default function App() {
             value={name}
             onChange={(e) => setName(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleGreet()}
-            style={{ padding: '8px 12px', borderRadius: 4, border: '1px solid #444', background: '#1a1a1a', color: '#e5e5e5', flex: 1 }}
+            style={{
+              padding: '8px 12px',
+              borderRadius: 4,
+              border: '1px solid #444',
+              background: '#1a1a1a',
+              color: '#e5e5e5',
+              flex: 1,
+            }}
           />
           <button data-testid="btn-greet" onClick={handleGreet}>
             Greet
@@ -92,7 +99,14 @@ export default function App() {
             value={newItem}
             onChange={(e) => setNewItem(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleAddItem()}
-            style={{ padding: '8px 12px', borderRadius: 4, border: '1px solid #444', background: '#1a1a1a', color: '#e5e5e5', flex: 1 }}
+            style={{
+              padding: '8px 12px',
+              borderRadius: 4,
+              border: '1px solid #444',
+              background: '#1a1a1a',
+              color: '#e5e5e5',
+              flex: 1,
+            }}
           />
           <button data-testid="btn-add-todo" onClick={handleAddItem}>
             Add
@@ -103,7 +117,13 @@ export default function App() {
             <li
               key={i}
               data-testid={`todo-item-${i}`}
-              style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid #222' }}
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                padding: '8px 0',
+                borderBottom: '1px solid #222',
+              }}
             >
               <span>{item}</span>
               <button
@@ -139,7 +159,11 @@ export default function App() {
               if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
               const text = await resp.text();
               let data;
-              try { data = JSON.parse(text); } catch { throw new Error('Not JSON — is the network mock installed?'); }
+              try {
+                data = JSON.parse(text);
+              } catch {
+                throw new Error('Not JSON — is the network mock installed?');
+              }
               setApiData(data.users || []);
             } catch (e) {
               setApiError(String(e));
@@ -152,16 +176,24 @@ export default function App() {
           Fetch Users
         </button>
         {apiLoading && <p data-testid="api-loading">Loading...</p>}
-        {apiError && <p data-testid="api-error" style={{ color: '#ef4444' }}>{apiError}</p>}
+        {apiError && (
+          <p data-testid="api-error" style={{ color: '#ef4444' }}>
+            {apiError}
+          </p>
+        )}
         {apiData.length > 0 && (
           <ul data-testid="api-list">
             {apiData.map((user, i) => (
-              <li key={i} data-testid={`api-user-${i}`}>{user}</li>
+              <li key={i} data-testid={`api-user-${i}`}>
+                {user}
+              </li>
             ))}
           </ul>
         )}
         {!apiLoading && !apiError && apiData.length === 0 && (
-          <p data-testid="api-empty" style={{ color: '#666' }}>No data yet. Click Fetch Users.</p>
+          <p data-testid="api-empty" style={{ color: '#666' }}>
+            No data yet. Click Fetch Users.
+          </p>
         )}
       </section>
 
@@ -177,9 +209,7 @@ export default function App() {
         >
           Show After 1s
         </button>
-        {delayedVisible && (
-          <p data-testid="delayed-element">I appeared after a delay!</p>
-        )}
+        {delayedVisible && <p data-testid="delayed-element">I appeared after a delay!</p>}
       </section>
 
       {/* File Upload Section */}
@@ -200,13 +230,31 @@ export default function App() {
       <section data-testid="dialog-section" style={{ marginTop: 32 }}>
         <h2>Dialogs</h2>
         <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-          <button data-testid="btn-alert" onClick={() => { alert('Hello from alert!'); setDialogResult('alert fired'); }}>
+          <button
+            data-testid="btn-alert"
+            onClick={() => {
+              alert('Hello from alert!');
+              setDialogResult('alert fired');
+            }}
+          >
             Alert
           </button>
-          <button data-testid="btn-confirm" onClick={() => { const r = confirm('Are you sure?'); setDialogResult(`confirm: ${r}`); }}>
+          <button
+            data-testid="btn-confirm"
+            onClick={() => {
+              const r = confirm('Are you sure?');
+              setDialogResult(`confirm: ${r}`);
+            }}
+          >
             Confirm
           </button>
-          <button data-testid="btn-prompt" onClick={() => { const r = prompt('Enter name:', 'default'); setDialogResult(`prompt: ${r}`); }}>
+          <button
+            data-testid="btn-prompt"
+            onClick={() => {
+              const r = prompt('Enter name:', 'default');
+              setDialogResult(`prompt: ${r}`);
+            }}
+          >
             Prompt
           </button>
         </div>
@@ -232,7 +280,13 @@ export default function App() {
               e.preventDefault();
               setDragResult('Dropped: ' + e.dataTransfer.getData('text/plain'));
             }}
-            style={{ padding: 16, background: '#222', borderRadius: 4, border: '2px dashed #555', minWidth: 120 }}
+            style={{
+              padding: 16,
+              background: '#222',
+              borderRadius: 4,
+              border: '2px dashed #555',
+              minWidth: 120,
+            }}
           >
             {dragResult || 'Drop here'}
           </div>
@@ -252,12 +306,26 @@ export default function App() {
         <div
           data-testid="modal-backdrop"
           onClick={() => setShowModal(false)}
-          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50 }}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.7)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 50,
+          }}
         >
           <div
             data-testid="modal"
             onClick={(e) => e.stopPropagation()}
-            style={{ background: '#1a1a1a', borderRadius: 8, padding: 24, maxWidth: 400, width: '90%' }}
+            style={{
+              background: '#1a1a1a',
+              borderRadius: 8,
+              padding: 24,
+              maxWidth: 400,
+              width: '90%',
+            }}
           >
             <h3>Modal Title</h3>
             <p style={{ marginTop: 8, color: '#ccc' }}>

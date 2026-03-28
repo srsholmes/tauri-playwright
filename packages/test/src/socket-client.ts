@@ -8,10 +8,13 @@ import { createInterface } from 'node:readline';
 export class PluginClient {
   private socket: Socket | null = null;
   private readline: ReturnType<typeof createInterface> | null = null;
-  private pending: Map<number, {
-    resolve: (value: PluginResponse) => void;
-    reject: (error: Error) => void;
-  }> = new Map();
+  private pending: Map<
+    number,
+    {
+      resolve: (value: PluginResponse) => void;
+      reject: (error: Error) => void;
+    }
+  > = new Map();
   private seq = 0;
   private responseQueue: string[] = [];
   private waitingForResponse: ((line: string) => void) | null = null;
@@ -77,14 +80,16 @@ export class PluginClient {
         }
 
         // Wait for the next response line
-        this.waitForLine().then((line) => {
-          try {
-            const response = JSON.parse(line) as PluginResponse;
-            resolve(response);
-          } catch (e) {
-            reject(new Error(`Invalid JSON response: ${line}`));
-          }
-        }).catch(reject);
+        this.waitForLine()
+          .then((line) => {
+            try {
+              const response = JSON.parse(line) as PluginResponse;
+              resolve(response);
+            } catch {
+              reject(new Error(`Invalid JSON response: ${line}`));
+            }
+          })
+          .catch(reject);
       });
     });
   }

@@ -21,7 +21,7 @@ test.describe('Modal', () => {
     expect(await tauriPage.isVisible('[data-testid="modal"]')).toBe(true);
 
     await tauriPage.click('[data-testid="btn-close-modal"]');
-    await tauriPage.waitForFunction("!document.querySelector('[data-testid=\"modal\"]')");
+    await tauriPage.waitForFunction('!document.querySelector(\'[data-testid="modal"]\')');
     expect(await tauriPage.isHidden('[data-testid="modal"]')).toBe(true);
   });
 
@@ -30,8 +30,8 @@ test.describe('Modal', () => {
     await tauriPage.waitForSelector('[data-testid="modal-backdrop"]');
 
     // Click the backdrop edge (not center, which would hit the modal content)
-    await tauriPage.evaluate("document.querySelector('[data-testid=\"modal-backdrop\"]').click()");
-    await tauriPage.waitForFunction("!document.querySelector('[data-testid=\"modal-backdrop\"]')");
+    await tauriPage.evaluate('document.querySelector(\'[data-testid="modal-backdrop"]\').click()');
+    await tauriPage.waitForFunction('!document.querySelector(\'[data-testid="modal-backdrop"]\')');
     expect(await tauriPage.isHidden('[data-testid="modal-backdrop"]')).toBe(true);
   });
 });

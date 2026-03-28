@@ -73,7 +73,11 @@ export class TauriPage {
 
   /** Select an option from a <select> element by value. Auto-waits. */
   async selectOption(selector: string, value: string, options?: TimeoutOption): Promise<string> {
-    const resp = await this.command('select_option', { selector, value, timeout_ms: this._t(options) });
+    const resp = await this.command('select_option', {
+      selector,
+      value,
+      timeout_ms: this._t(options),
+    });
     return resp.data as string;
   }
 
@@ -120,8 +124,16 @@ export class TauriPage {
   }
 
   /** Get an attribute value from an element. Auto-waits for element. */
-  async getAttribute(selector: string, name: string, options?: TimeoutOption): Promise<string | null> {
-    const resp = await this.command('get_attribute', { selector, name, timeout_ms: this._t(options) });
+  async getAttribute(
+    selector: string,
+    name: string,
+    options?: TimeoutOption,
+  ): Promise<string | null> {
+    const resp = await this.command('get_attribute', {
+      selector,
+      name,
+      timeout_ms: this._t(options),
+    });
     return resp.data as string | null;
   }
 
@@ -250,14 +262,26 @@ export class TauriPage {
   }
 
   /** Get a computed CSS style value from an element. Auto-waits. */
-  async getComputedStyle(selector: string, property: string, options?: TimeoutOption): Promise<string> {
-    const resp = await this.command('get_computed_style', { selector, property, timeout_ms: this._t(options) });
+  async getComputedStyle(
+    selector: string,
+    property: string,
+    options?: TimeoutOption,
+  ): Promise<string> {
+    const resp = await this.command('get_computed_style', {
+      selector,
+      property,
+      timeout_ms: this._t(options),
+    });
     return resp.data as string;
   }
 
   /** Dispatch a custom DOM event on an element. Auto-waits. */
   async dispatchEvent(selector: string, eventType: string, options?: TimeoutOption): Promise<void> {
-    await this.command('dispatch_event', { selector, event_type: eventType, timeout_ms: this._t(options) });
+    await this.command('dispatch_event', {
+      selector,
+      event_type: eventType,
+      timeout_ms: this._t(options),
+    });
   }
 
   // ── Drag and drop ───────────────────────────────────────────────────────
@@ -280,7 +304,11 @@ export class TauriPage {
       mime_type: f.mimeType,
       base64: f.buffer.toString('base64'),
     }));
-    const resp = await this.command('set_input_files', { selector, files: payload, timeout_ms: this._t(options) });
+    const resp = await this.command('set_input_files', {
+      selector,
+      files: payload,
+      timeout_ms: this._t(options),
+    });
     return resp.data as number;
   }
 
@@ -340,9 +368,7 @@ export class TauriPage {
   }
 
   /** Get captured network requests. */
-  async getNetworkRequests(): Promise<
-    Array<{ url: string; method: string; timestamp: number }>
-  > {
+  async getNetworkRequests(): Promise<Array<{ url: string; method: string; timestamp: number }>> {
     const resp = await this.command('get_network_requests', {});
     return (resp.data ?? []) as Array<{ url: string; method: string; timestamp: number }>;
   }
@@ -409,21 +435,18 @@ export class TauriPage {
   }
 
   getByPlaceholder(text: string, options?: { exact?: boolean }): TauriLocator {
-    return new TauriLocator(this, options?.exact
-      ? `[placeholder="${text}"]`
-      : `[placeholder*="${text}"]`);
+    return new TauriLocator(
+      this,
+      options?.exact ? `[placeholder="${text}"]` : `[placeholder*="${text}"]`,
+    );
   }
 
   getByAltText(text: string, options?: { exact?: boolean }): TauriLocator {
-    return new TauriLocator(this, options?.exact
-      ? `[alt="${text}"]`
-      : `[alt*="${text}"]`);
+    return new TauriLocator(this, options?.exact ? `[alt="${text}"]` : `[alt*="${text}"]`);
   }
 
   getByTitle(text: string, options?: { exact?: boolean }): TauriLocator {
-    return new TauriLocator(this, options?.exact
-      ? `[title="${text}"]`
-      : `[title*="${text}"]`);
+    return new TauriLocator(this, options?.exact ? `[title="${text}"]` : `[title*="${text}"]`);
   }
 
   getByRole(role: string, options?: { name?: string }): TauriLocator {
@@ -438,9 +461,7 @@ export class TauriPage {
     // The locator resolves via JS at execution time
     const escaped = JSON.stringify(text);
     const exact = options?.exact ?? false;
-    const jsSelector = exact
-      ? `[data-pw-text-exact=${escaped}]`
-      : `[data-pw-text=${escaped}]`;
+    const jsSelector = exact ? `[data-pw-text-exact=${escaped}]` : `[data-pw-text=${escaped}]`;
     // Use a special prefix to signal JS-based resolution
     return new TauriLocator(this, jsSelector, {
       jsFind: `Array.from(document.querySelectorAll('*')).find(el => {
@@ -532,29 +553,47 @@ export class TauriLocator {
 
   async click(options?: TimeoutOption): Promise<void> {
     if (!this._jsFind) return this.page.click(this.selector, options);
-    await this._eval(this._actionScript('el.scrollIntoView({block:"center"}); el.click(); return null'));
+    await this._eval(
+      this._actionScript('el.scrollIntoView({block:"center"}); el.click(); return null'),
+    );
   }
 
   async dblclick(options?: TimeoutOption): Promise<void> {
     if (!this._jsFind) return this.page.dblclick(this.selector, options);
-    await this._eval(this._actionScript('el.scrollIntoView({block:"center"}); el.dispatchEvent(new MouseEvent("dblclick",{bubbles:true})); return null'));
+    await this._eval(
+      this._actionScript(
+        'el.scrollIntoView({block:"center"}); el.dispatchEvent(new MouseEvent("dblclick",{bubbles:true})); return null',
+      ),
+    );
   }
 
   async hover(options?: TimeoutOption): Promise<void> {
     if (!this._jsFind) return this.page.hover(this.selector, options);
-    await this._eval(this._actionScript('el.scrollIntoView({block:"center"}); el.dispatchEvent(new MouseEvent("mouseenter",{bubbles:true})); el.dispatchEvent(new MouseEvent("mouseover",{bubbles:true})); return null'));
+    await this._eval(
+      this._actionScript(
+        'el.scrollIntoView({block:"center"}); el.dispatchEvent(new MouseEvent("mouseenter",{bubbles:true})); el.dispatchEvent(new MouseEvent("mouseover",{bubbles:true})); return null',
+      ),
+    );
   }
 
   async fill(text: string, options?: TimeoutOption): Promise<void> {
     if (!this._jsFind) return this.page.fill(this.selector, text, options);
     const t = JSON.stringify(text);
-    await this._eval(this._actionScript(`el.focus(); var desc=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value'); if(desc&&desc.set) desc.set.call(el,${t}); else el.value=${t}; el.dispatchEvent(new Event('input',{bubbles:true})); el.dispatchEvent(new Event('change',{bubbles:true})); return null`));
+    await this._eval(
+      this._actionScript(
+        `el.focus(); var desc=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value'); if(desc&&desc.set) desc.set.call(el,${t}); else el.value=${t}; el.dispatchEvent(new Event('input',{bubbles:true})); el.dispatchEvent(new Event('change',{bubbles:true})); return null`,
+      ),
+    );
   }
 
   async press(key: string, options?: TimeoutOption): Promise<void> {
     if (!this._jsFind) return this.page.press(this.selector, key, options);
     const k = JSON.stringify(key);
-    await this._eval(this._actionScript(`el.focus(); var o={key:${k},bubbles:true}; el.dispatchEvent(new KeyboardEvent('keydown',o)); el.dispatchEvent(new KeyboardEvent('keypress',o)); el.dispatchEvent(new KeyboardEvent('keyup',o)); return null`));
+    await this._eval(
+      this._actionScript(
+        `el.focus(); var o={key:${k},bubbles:true}; el.dispatchEvent(new KeyboardEvent('keydown',o)); el.dispatchEvent(new KeyboardEvent('keypress',o)); el.dispatchEvent(new KeyboardEvent('keyup',o)); return null`,
+      ),
+    );
   }
 
   async check(options?: TimeoutOption): Promise<void> {
@@ -570,7 +609,11 @@ export class TauriLocator {
   async selectOption(value: string, options?: TimeoutOption): Promise<string> {
     if (!this._jsFind) return this.page.selectOption(this.selector, value, options);
     const v = JSON.stringify(value);
-    return this._eval(this._actionScript(`el.value=${v}; el.dispatchEvent(new Event('change',{bubbles:true})); return el.value`));
+    return this._eval(
+      this._actionScript(
+        `el.value=${v}; el.dispatchEvent(new Event('change',{bubbles:true})); return el.value`,
+      ),
+    );
   }
 
   async focus(options?: TimeoutOption): Promise<void> {
@@ -602,28 +645,40 @@ export class TauriLocator {
   async dispatchEvent(eventType: string, options?: TimeoutOption): Promise<void> {
     if (!this._jsFind) return this.page.dispatchEvent(this.selector, eventType, options);
     const e = JSON.stringify(eventType);
-    await this._eval(this._actionScript(`el.dispatchEvent(new Event(${e},{bubbles:true})); return null`));
+    await this._eval(
+      this._actionScript(`el.dispatchEvent(new Event(${e},{bubbles:true})); return null`),
+    );
   }
 
   /** Run a JS function on the matched element. The function receives `el` as argument. */
   async evaluate<T = unknown>(fn: string): Promise<T> {
     if (!this._jsFind) {
-      return this.page.evaluate<T>(`(function(){ var el=document.querySelector(${JSON.stringify(this.selector)}); if(!el) throw new Error('not found'); return (${fn})(el); })()`);
+      return this.page.evaluate<T>(
+        `(function(){ var el=document.querySelector(${JSON.stringify(this.selector)}); if(!el) throw new Error('not found'); return (${fn})(el); })()`,
+      );
     }
-    return this._eval(`(function(){ var el=${this._jsFind}; if(!el) throw new Error('not found'); return (${fn})(el); })()`);
+    return this._eval(
+      `(function(){ var el=${this._jsFind}; if(!el) throw new Error('not found'); return (${fn})(el); })()`,
+    );
   }
 
   /** Check if this element is the active/focused element. */
   async isFocused(): Promise<boolean> {
     if (!this._jsFind) return this.page.isFocused(this.selector);
-    return this._eval(`(function(){ var el=${this._jsFind}; return el!==null&&document.activeElement===el; })()`);
+    return this._eval(
+      `(function(){ var el=${this._jsFind}; return el!==null&&document.activeElement===el; })()`,
+    );
   }
 
   async scrollIntoViewIfNeeded(): Promise<void> {
     if (!this._jsFind) {
-      await this.page.evaluate(`document.querySelector(${JSON.stringify(this.selector)})?.scrollIntoView({block:'center'})`);
+      await this.page.evaluate(
+        `document.querySelector(${JSON.stringify(this.selector)})?.scrollIntoView({block:'center'})`,
+      );
     } else {
-      await this._eval(`(function(){ var el=${this._jsFind}; if(el) el.scrollIntoView({block:'center'}); return null; })()`);
+      await this._eval(
+        `(function(){ var el=${this._jsFind}; if(el) el.scrollIntoView({block:'center'}); return null; })()`,
+      );
     }
   }
 
@@ -656,14 +711,18 @@ export class TauriLocator {
 
   async boundingBox(): Promise<{ x: number; y: number; width: number; height: number } | null> {
     if (!this._jsFind) return this.page.boundingBox(this.selector);
-    return this._eval(`(function(){ var el=${this._jsFind}; if(!el) return null; var r=el.getBoundingClientRect(); return {x:r.left,y:r.top,width:r.width,height:r.height}; })()`);
+    return this._eval(
+      `(function(){ var el=${this._jsFind}; if(!el) return null; var r=el.getBoundingClientRect(); return {x:r.left,y:r.top,width:r.width,height:r.height}; })()`,
+    );
   }
 
   // ── State ───────────────────────────────────────────────────────────
 
   async isVisible(): Promise<boolean> {
     if (!this._jsFind) return this.page.isVisible(this.selector);
-    return this._eval(`(function(){ var el=${this._jsFind}; if(!el) return false; var r=el.getBoundingClientRect(); var st=getComputedStyle(el); return r.width>0&&r.height>0&&st.visibility!=='hidden'&&st.display!=='none'&&parseFloat(st.opacity)>0; })()`);
+    return this._eval(
+      `(function(){ var el=${this._jsFind}; if(!el) return false; var r=el.getBoundingClientRect(); var st=getComputedStyle(el); return r.width>0&&r.height>0&&st.visibility!=='hidden'&&st.display!=='none'&&parseFloat(st.opacity)>0; })()`,
+    );
   }
 
   async isHidden(): Promise<boolean> {
@@ -672,17 +731,23 @@ export class TauriLocator {
 
   async isChecked(): Promise<boolean> {
     if (!this._jsFind) return this.page.isChecked(this.selector);
-    return this._eval(`(function(){ var el=${this._jsFind}; if(!el) return false; return !!el.checked; })()`);
+    return this._eval(
+      `(function(){ var el=${this._jsFind}; if(!el) return false; return !!el.checked; })()`,
+    );
   }
 
   async isDisabled(): Promise<boolean> {
     if (!this._jsFind) return this.page.isDisabled(this.selector);
-    return this._eval(`(function(){ var el=${this._jsFind}; if(!el) return true; return el.disabled===true||el.hasAttribute('disabled'); })()`);
+    return this._eval(
+      `(function(){ var el=${this._jsFind}; if(!el) return true; return el.disabled===true||el.hasAttribute('disabled'); })()`,
+    );
   }
 
   async isEditable(): Promise<boolean> {
     if (!this._jsFind) return this.page.isEditable(this.selector);
-    return this._eval(`(function(){ var el=${this._jsFind}; if(!el) return false; if(el.disabled||el.readOnly) return false; var tag=el.tagName; return tag==='INPUT'||tag==='TEXTAREA'||tag==='SELECT'||el.isContentEditable; })()`);
+    return this._eval(
+      `(function(){ var el=${this._jsFind}; if(!el) return false; if(el.disabled||el.readOnly) return false; var tag=el.tagName; return tag==='INPUT'||tag==='TEXTAREA'||tag==='SELECT'||el.isContentEditable; })()`,
+    );
   }
 
   async isEnabled(): Promise<boolean> {
@@ -724,9 +789,10 @@ export class TauriLocator {
   filter(options: { hasText?: string | RegExp }): TauriLocator {
     const sel = JSON.stringify(this.selector);
     if (options.hasText) {
-      const match = typeof options.hasText === 'string'
-        ? `t.includes(${JSON.stringify(options.hasText)})`
-        : `${options.hasText.toString()}.test(t)`;
+      const match =
+        typeof options.hasText === 'string'
+          ? `t.includes(${JSON.stringify(options.hasText)})`
+          : `${options.hasText.toString()}.test(t)`;
       return new TauriLocator(this.page, this.selector, {
         jsFind: `Array.from(document.querySelectorAll(${sel})).find(function(el){ var t=el.textContent||''; return ${match}; })`,
       });
@@ -788,12 +854,16 @@ export class TauriKeyboard {
 
   async down(key: string): Promise<void> {
     this._modifiers.add(key);
-    await this.page.evaluate(`(function(){ var el=document.activeElement||document.body; el.dispatchEvent(new KeyboardEvent('keydown',{key:${JSON.stringify(key)},bubbles:true})); })()`);
+    await this.page.evaluate(
+      `(function(){ var el=document.activeElement||document.body; el.dispatchEvent(new KeyboardEvent('keydown',{key:${JSON.stringify(key)},bubbles:true})); })()`,
+    );
   }
 
   async up(key: string): Promise<void> {
     this._modifiers.delete(key);
-    await this.page.evaluate(`(function(){ var el=document.activeElement||document.body; el.dispatchEvent(new KeyboardEvent('keyup',{key:${JSON.stringify(key)},bubbles:true})); })()`);
+    await this.page.evaluate(
+      `(function(){ var el=document.activeElement||document.body; el.dispatchEvent(new KeyboardEvent('keyup',{key:${JSON.stringify(key)},bubbles:true})); })()`,
+    );
   }
 
   async type(text: string, options?: { delay?: number }): Promise<void> {
@@ -823,7 +893,11 @@ export class TauriKeyboard {
 export class TauriMouse {
   constructor(private page: TauriPage) {}
 
-  async click(x: number, y: number, options?: { button?: 'left' | 'right' | 'middle' }): Promise<void> {
+  async click(
+    x: number,
+    y: number,
+    options?: { button?: 'left' | 'right' | 'middle' },
+  ): Promise<void> {
     const btn = options?.button === 'right' ? 2 : options?.button === 'middle' ? 1 : 0;
     await this.page.evaluate(`(function(){
       var el=document.elementFromPoint(${x},${y}); if(!el) return;
@@ -851,15 +925,21 @@ export class TauriMouse {
 
   async down(options?: { button?: 'left' | 'right' | 'middle' }): Promise<void> {
     const btn = options?.button === 'right' ? 2 : options?.button === 'middle' ? 1 : 0;
-    await this.page.evaluate(`document.activeElement?.dispatchEvent(new MouseEvent('mousedown',{bubbles:true,button:${btn}}))`);
+    await this.page.evaluate(
+      `document.activeElement?.dispatchEvent(new MouseEvent('mousedown',{bubbles:true,button:${btn}}))`,
+    );
   }
 
   async up(options?: { button?: 'left' | 'right' | 'middle' }): Promise<void> {
     const btn = options?.button === 'right' ? 2 : options?.button === 'middle' ? 1 : 0;
-    await this.page.evaluate(`document.activeElement?.dispatchEvent(new MouseEvent('mouseup',{bubbles:true,button:${btn}}))`);
+    await this.page.evaluate(
+      `document.activeElement?.dispatchEvent(new MouseEvent('mouseup',{bubbles:true,button:${btn}}))`,
+    );
   }
 
   async wheel(deltaX: number, deltaY: number): Promise<void> {
-    await this.page.evaluate(`document.activeElement?.dispatchEvent(new WheelEvent('wheel',{bubbles:true,deltaX:${deltaX},deltaY:${deltaY}}))`);
+    await this.page.evaluate(
+      `document.activeElement?.dispatchEvent(new WheelEvent('wheel',{bubbles:true,deltaX:${deltaX},deltaY:${deltaY}}))`,
+    );
   }
 }

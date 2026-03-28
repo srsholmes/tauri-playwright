@@ -41,10 +41,13 @@ export class TauriProcessManager {
         },
       });
 
-      const timeout = setTimeout(() => {
-        reject(new Error(`Tauri app did not start within ${this.config.startTimeout ?? 120}s`));
-        this.stop();
-      }, (this.config.startTimeout ?? 120) * 1000);
+      const timeout = setTimeout(
+        () => {
+          reject(new Error(`Tauri app did not start within ${this.config.startTimeout ?? 120}s`));
+          this.stop();
+        },
+        (this.config.startTimeout ?? 120) * 1000,
+      );
 
       // Watch stdout/stderr for the socket ready signal
       const onData = (data: Buffer) => {
@@ -56,7 +59,7 @@ export class TauriProcessManager {
         } else if (text.includes('tauri-plugin-playwright: listening on tcp://')) {
           clearTimeout(timeout);
           const match = text.match(/tcp:\/\/127\.0\.0\.1:(\d+)/);
-          const port = match ? parseInt(match[1]) : this.tcpPort ?? 6274;
+          const port = match ? parseInt(match[1]) : (this.tcpPort ?? 6274);
           resolve({ tcpPort: port });
         }
       };

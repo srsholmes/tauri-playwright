@@ -41,7 +41,11 @@ describe('TauriPage', () => {
 
     it('type sends type_text command', async () => {
       await page.type('input', 'world');
-      expect(mock.lastCall()).toMatchObject({ type: 'type_text', selector: 'input', text: 'world' });
+      expect(mock.lastCall()).toMatchObject({
+        type: 'type_text',
+        selector: 'input',
+        text: 'world',
+      });
     });
 
     it('press sends press command with key', async () => {
@@ -78,7 +82,11 @@ describe('TauriPage', () => {
 
     it('dragAndDrop sends drag_and_drop with source and target', async () => {
       await page.dragAndDrop('#src', '#tgt');
-      expect(mock.lastCall()).toMatchObject({ type: 'drag_and_drop', source: '#src', target: '#tgt' });
+      expect(mock.lastCall()).toMatchObject({
+        type: 'drag_and_drop',
+        source: '#src',
+        target: '#tgt',
+      });
     });
   });
 
@@ -242,7 +250,9 @@ describe('TauriPage', () => {
   describe('errors', () => {
     it('throws on command failure', async () => {
       mock.setError('not found: #missing');
-      await expect(page.click('#missing')).rejects.toThrow("TauriPage command 'click' failed: not found: #missing");
+      await expect(page.click('#missing')).rejects.toThrow(
+        "TauriPage command 'click' failed: not found: #missing",
+      );
     });
   });
 
@@ -412,8 +422,8 @@ describe('TauriPage', () => {
       expect(count).toBe(1);
       const call = mock.lastCall()!;
       expect(call.type).toBe('set_input_files');
-      expect((call.files as any[])[0].name).toBe('test.txt');
-      expect((call.files as any[])[0].base64).toBe(buf.toString('base64'));
+      expect((call.files as Array<Record<string, unknown>>)[0].name).toBe('test.txt');
+      expect((call.files as Array<Record<string, unknown>>)[0].base64).toBe(buf.toString('base64'));
     });
   });
 
@@ -436,7 +446,9 @@ describe('TauriPage', () => {
     });
 
     it('stopRecording sends stop_recording', async () => {
-      mock.setResponse({ data: { dir: '/tmp/rec', frame_count: 10, fps: 15, video: '/tmp/rec/video.mp4' } });
+      mock.setResponse({
+        data: { dir: '/tmp/rec', frame_count: 10, fps: 15, video: '/tmp/rec/video.mp4' },
+      });
       const result = await page.stopRecording();
       expect(result.frame_count).toBe(10);
       expect(result.video).toBe('/tmp/rec/video.mp4');

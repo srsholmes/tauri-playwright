@@ -20,7 +20,7 @@ test.describe('Greet (Tauri IPC)', () => {
     await tauriPage.fill('[data-testid="greet-input"]', 'Bob');
     await tauriPage.click('[data-testid="btn-greet"]');
     await tauriPage.waitForFunction(
-      "document.querySelector('[data-testid=\"greet-result\"]')?.textContent?.includes('Bob')"
+      "document.querySelector('[data-testid=\"greet-result\"]')?.textContent?.includes('Bob')",
     );
     text = await tauriPage.textContent('[data-testid="greet-result"]');
     expect(text).toContain('Hello, Bob!');

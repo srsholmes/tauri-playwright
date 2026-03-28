@@ -1,5 +1,5 @@
-import type { Page } from '@playwright/test';
 import type { TauriPage } from './tauri-page.js';
+import type { BrowserPageAdapter } from './browser-page-adapter.js';
 
 /**
  * Configuration for creating a Tauri Playwright test fixture.
@@ -59,7 +59,7 @@ export type TestMode = 'browser' | 'tauri' | 'cdp';
  * In tauri mode, tauriPage is a TauriPage with Playwright-like API.
  */
 export interface TauriFixtures {
-  tauriPage: Page | TauriPage;
+  tauriPage: TauriPage | BrowserPageAdapter;
   mode: TestMode;
 }
 

@@ -29,7 +29,7 @@ test.describe('Auto-waiting', () => {
   test('timeout error on nonexistent element', async ({ tauriPage }) => {
     // Short timeout should fail fast
     await expect(
-      tauriPage.textContent('[data-testid="does-not-exist"]', { timeout: 200 })
+      tauriPage.textContent('[data-testid="does-not-exist"]', { timeout: 200 }),
     ).rejects.toThrow(/timeout/i);
   });
 

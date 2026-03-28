@@ -5,7 +5,7 @@ import { PluginClient } from './socket-client.js';
 import { TauriPage } from './tauri-page.js';
 import { BrowserPageAdapter } from './browser-page-adapter.js';
 import { TauriProcessManager } from './process-manager.js';
-import type { TauriTestConfig, TestMode, TauriFixtures, CapturedInvoke } from './types.js';
+import type { TauriTestConfig, TauriFixtures, CapturedInvoke } from './types.js';
 
 /**
  * Creates a Playwright test instance with Tauri-specific fixtures.
@@ -18,7 +18,6 @@ export function createTauriTest(config: TauriTestConfig) {
   const tauriTest = base.extend<TauriFixtures>({
     mode: ['browser', { option: true }],
 
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     tauriPage: async ({ page, mode }, use, testInfo: TestInfo) => {
       if (mode === 'browser') {
         // Browser-only mode: mock Tauri IPC and run in Chromium
@@ -31,7 +30,7 @@ export function createTauriTest(config: TauriTestConfig) {
         await page.goto(config.devUrl);
         await page.waitForLoadState('networkidle');
         const adapter = new BrowserPageAdapter(page);
-        await use(adapter as unknown as TauriFixtures['tauriPage']);
+        await use(adapter as TauriFixtures['tauriPage']);
       } else if (mode === 'cdp') {
         // CDP mode: connect directly to WebView2 via Chrome DevTools Protocol.
         // Windows only — WebView2 is Chromium-based and supports --remote-debugging-port.
@@ -41,14 +40,17 @@ export function createTauriTest(config: TauriTestConfig) {
         try {
           browser = await chromium.connectOverCDP(endpoint);
           const context = browser.contexts()[0];
-          if (!context) throw new Error('No browser context found — is the Tauri app running with CDP enabled?');
-          const cdpPage = context.pages()[0] ?? await context.newPage();
+          if (!context)
+            throw new Error(
+              'No browser context found — is the Tauri app running with CDP enabled?',
+            );
+          const cdpPage = context.pages()[0] ?? (await context.newPage());
 
           // Wait for the app to be ready
           await cdpPage.waitForLoadState('domcontentloaded');
 
           const adapter = new BrowserPageAdapter(cdpPage);
-          await use(adapter as unknown as TauriFixtures['tauriPage']);
+          await use(adapter as TauriFixtures['tauriPage']);
         } finally {
           // Don't close the browser — we connected to an existing one
           browser?.close().catch(() => {});
@@ -57,7 +59,7 @@ export function createTauriTest(config: TauriTestConfig) {
         // Tauri mode: connect to the real Tauri app via the plugin socket
         let processManager: TauriProcessManager | null = null;
         let client: PluginClient | null = null;
-        let tauriPage: TauriPage | null = null;
+        let tauriPage: TauriPage;
 
         try {
           const socketPath = config.mcpSocket ?? '/tmp/tauri-playwright.sock';
@@ -96,7 +98,7 @@ export function createTauriTest(config: TauriTestConfig) {
           if (config.devUrl) {
             await tauriPage.evaluate(`window.location.href = ${JSON.stringify(config.devUrl)}`);
             // Wait for the page to load
-            await new Promise(r => setTimeout(r, 300));
+            await new Promise((r) => setTimeout(r, 300));
             await tauriPage.waitForFunction('document.readyState === "complete"');
           }
 
@@ -112,7 +114,7 @@ export function createTauriTest(config: TauriTestConfig) {
             // Recording failed to start — non-fatal
           }
 
-          await use(tauriPage as unknown as TauriFixtures['tauriPage']);
+          await use(tauriPage as TauriFixtures['tauriPage']);
 
           // After test: stop recording and capture screenshot on failure
           let videoPath: string | null = null;
@@ -185,8 +187,8 @@ export async function clearCapturedInvokes(page: Page): Promise<void> {
  * Emit a mock Tauri event into the page (browser mode only).
  */
 export async function emitMockEvent(page: Page, event: string, payload: unknown): Promise<void> {
-  await page.evaluate(
-    ({ event, payload }) => window.__TAURI_EMIT_MOCK_EVENT__(event, payload),
-    { event, payload }
-  );
+  await page.evaluate(({ event, payload }) => window.__TAURI_EMIT_MOCK_EVENT__(event, payload), {
+    event,
+    payload,
+  });
 }

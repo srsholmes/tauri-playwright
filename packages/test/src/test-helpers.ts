@@ -1,5 +1,5 @@
 import { vi } from 'vitest';
-import type { PluginResponse } from './socket-client.js';
+import type { PluginClient, PluginResponse } from './socket-client.js';
 
 /**
  * Creates a mock PluginClient for unit testing TauriPage without a socket.
@@ -19,7 +19,7 @@ export function createMockClient(defaultResponse?: Partial<PluginResponse>) {
   };
 
   return {
-    client: client as any,
+    client: client as unknown as PluginClient,
     calls,
     setResponse(resp: Partial<PluginResponse>) {
       nextResponses = [{ ok: true, data: null, ...resp }];

@@ -1,7 +1,6 @@
 import { test, expect } from '../fixtures';
 
 test.describe('Playwright Parity', () => {
-
   // ── Locator Assertions (Phase 2) ────────────────────────────────────
 
   test('expect(locator).toBeVisible / toBeHidden', async ({ tauriPage }) => {
@@ -12,7 +11,9 @@ test.describe('Playwright Parity', () => {
 
   test('expect(locator).toContainText / toHaveText', async ({ tauriPage }) => {
     await expect(tauriPage.locator('[data-testid="heading"]')).toContainText('Tauri Playwright');
-    await expect(tauriPage.locator('[data-testid="heading"]')).toHaveText('Hello, Tauri Playwright!');
+    await expect(tauriPage.locator('[data-testid="heading"]')).toHaveText(
+      'Hello, Tauri Playwright!',
+    );
     await expect(tauriPage.locator('[data-testid="heading"]')).not.toContainText('nonexistent');
   });
 
@@ -24,7 +25,10 @@ test.describe('Playwright Parity', () => {
 
   test('expect(locator).toHaveAttribute', async ({ tauriPage }) => {
     await expect(tauriPage.locator('[data-testid="greet-input"]')).toHaveAttribute('type', 'text');
-    await expect(tauriPage.locator('[data-testid="greet-input"]')).toHaveAttribute('placeholder', 'Enter your name');
+    await expect(tauriPage.locator('[data-testid="greet-input"]')).toHaveAttribute(
+      'placeholder',
+      'Enter your name',
+    );
     await expect(tauriPage.locator('[data-testid="greet-input"]')).toHaveAttribute('placeholder'); // just check exists
   });
 

@@ -17,11 +17,6 @@ export { PluginClient } from './socket-client.js';
 export { TauriProcessManager } from './process-manager.js';
 
 // Types
-export type {
-  TauriTestConfig,
-  TestMode,
-  TauriFixtures,
-  CapturedInvoke,
-} from './types.js';
+export type { TauriTestConfig, TestMode, TauriFixtures, CapturedInvoke } from './types.js';
 export type { PluginResponse } from './socket-client.js';
 export type { ProcessConfig } from './process-manager.js';

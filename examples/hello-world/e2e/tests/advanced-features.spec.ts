@@ -2,14 +2,12 @@ import { test, expect } from '../fixtures';
 import { Buffer } from 'node:buffer';
 
 test.describe('Advanced Features', () => {
-
   test('file upload — setInputFiles', async ({ tauriPage }) => {
     // Create a fake file
     const content = Buffer.from('Hello, this is a test file!');
-    const fileCount = await (tauriPage as any).setInputFiles(
-      '[data-testid="file-input"]',
-      [{ name: 'test.txt', mimeType: 'text/plain', buffer: content }],
-    );
+    const fileCount = await tauriPage.setInputFiles('[data-testid="file-input"]', [
+      { name: 'test.txt', mimeType: 'text/plain', buffer: content },
+    ]);
     expect(fileCount).toBe(1);
 
     // Wait for React to update
@@ -21,7 +19,7 @@ test.describe('Advanced Features', () => {
 
   test('dialog handling — alert, confirm, prompt', async ({ tauriPage }) => {
     // Install dialog handler
-    await (tauriPage as any).installDialogHandler({
+    await tauriPage.installDialogHandler({
       defaultConfirm: true,
       defaultPromptText: 'Claude',
     });
@@ -30,7 +28,7 @@ test.describe('Advanced Features', () => {
     await tauriPage.click('[data-testid="btn-alert"]');
     await tauriPage.waitForSelector('[data-testid="dialog-result"]');
 
-    let dialogs = await (tauriPage as any).getDialogs();
+    let dialogs = await tauriPage.getDialogs();
     expect(dialogs.length).toBeGreaterThanOrEqual(1);
     expect(dialogs[0].type).toBe('alert');
     expect(dialogs[0].message).toContain('Hello from alert');
@@ -39,26 +37,26 @@ test.describe('Advanced Features', () => {
     expect(result).toContain('alert fired');
 
     // Trigger confirm (auto-returns true)
-    await (tauriPage as any).clearDialogs();
+    await tauriPage.clearDialogs();
     await tauriPage.click('[data-testid="btn-confirm"]');
     await tauriPage.waitForFunction(
-      "document.querySelector('[data-testid=\"dialog-result\"]')?.textContent?.includes('confirm')"
+      "document.querySelector('[data-testid=\"dialog-result\"]')?.textContent?.includes('confirm')",
     );
 
-    dialogs = await (tauriPage as any).getDialogs();
+    dialogs = await tauriPage.getDialogs();
     expect(dialogs.some((d: any) => d.type === 'confirm')).toBe(true);
 
     result = await tauriPage.textContent('[data-testid="dialog-result"]');
     expect(result).toContain('confirm: true');
 
     // Trigger prompt (auto-returns 'Claude')
-    await (tauriPage as any).clearDialogs();
+    await tauriPage.clearDialogs();
     await tauriPage.click('[data-testid="btn-prompt"]');
     await tauriPage.waitForFunction(
-      "document.querySelector('[data-testid=\"dialog-result\"]')?.textContent?.includes('prompt')"
+      "document.querySelector('[data-testid=\"dialog-result\"]')?.textContent?.includes('prompt')",
     );
 
-    dialogs = await (tauriPage as any).getDialogs();
+    dialogs = await tauriPage.getDialogs();
     expect(dialogs.some((d: any) => d.type === 'prompt')).toBe(true);
 
     result = await tauriPage.textContent('[data-testid="dialog-result"]');
@@ -69,7 +67,7 @@ test.describe('Advanced Features', () => {
     // The app has a "Fetch Users" button that calls GET /api/users.
     // No real server exists — mock it so the UI renders the mocked data.
 
-    await (tauriPage as any).route('/api/users', {
+    await tauriPage.route('/api/users', {
       status: 200,
       body: JSON.stringify({ users: ['Alice', 'Bob', 'Charlie'] }),
       contentType: 'application/json',
@@ -96,14 +94,14 @@ test.describe('Advanced Features', () => {
     expect(allUsers).toEqual(['Alice', 'Bob', 'Charlie']);
 
     // Check captured network requests include our call
-    const requests = await (tauriPage as any).getNetworkRequests();
+    const requests = await tauriPage.getNetworkRequests();
     const apiCall = requests.find((r: any) => r.url.includes('/api/users'));
     expect(apiCall).toBeTruthy();
     expect(apiCall.method).toBe('GET');
 
     // Now mock an error response and verify the UI shows the error
-    await (tauriPage as any).clearRoutes();
-    await (tauriPage as any).route('/api/users', {
+    await tauriPage.clearRoutes();
+    await tauriPage.route('/api/users', {
       status: 500,
       body: JSON.stringify({ error: 'Internal Server Error' }),
     });
@@ -115,8 +113,8 @@ test.describe('Advanced Features', () => {
     expect(errorText).toContain('500');
 
     // Clean up
-    await (tauriPage as any).clearRoutes();
-    await (tauriPage as any).clearNetworkRequests();
+    await tauriPage.clearRoutes();
+    await tauriPage.clearNetworkRequests();
   });
 
   test('drag and drop', async ({ tauriPage }) => {
@@ -125,14 +123,11 @@ test.describe('Advanced Features', () => {
     expect(before).toContain('Drop here');
 
     // Perform drag and drop
-    await (tauriPage as any).dragAndDrop(
-      '[data-testid="drag-source"]',
-      '[data-testid="drop-target"]',
-    );
+    await tauriPage.dragAndDrop('[data-testid="drag-source"]', '[data-testid="drop-target"]');
 
     // Check result
     await tauriPage.waitForFunction(
-      "document.querySelector('[data-testid=\"drag-result\"]')?.textContent?.includes('Dropped')"
+      "document.querySelector('[data-testid=\"drag-result\"]')?.textContent?.includes('Dropped')",
     );
     const after = await tauriPage.textContent('[data-testid="drag-result"]');
     expect(after).toContain('Dropped');

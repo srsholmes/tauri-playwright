@@ -71,7 +71,11 @@ export const tauriExpect = baseExpect.extend({
   async toBeVisible(locator: LocatorLike, options?: { timeout?: number }) {
     const assertionName = 'toBeVisible';
     const timeout = getTimeout(options);
-    const { pass } = await pollUntil(() => locator.isVisible(), (v) => v === true, timeout);
+    const { pass } = await pollUntil(
+      () => locator.isVisible(),
+      (v) => v === true,
+      timeout,
+    );
     return {
       pass,
       name: assertionName,
@@ -84,7 +88,11 @@ export const tauriExpect = baseExpect.extend({
 
   async toBeHidden(locator: LocatorLike, options?: { timeout?: number }) {
     const timeout = getTimeout(options);
-    const { pass } = await pollUntil(() => locator.isHidden(), (v) => v === true, timeout);
+    const { pass } = await pollUntil(
+      () => locator.isHidden(),
+      (v) => v === true,
+      timeout,
+    );
     return {
       pass,
       name: 'toBeHidden',
@@ -97,7 +105,11 @@ export const tauriExpect = baseExpect.extend({
 
   async toBeEnabled(locator: LocatorLike, options?: { timeout?: number }) {
     const timeout = getTimeout(options);
-    const { pass } = await pollUntil(() => locator.isEnabled(), (v) => v === true, timeout);
+    const { pass } = await pollUntil(
+      () => locator.isEnabled(),
+      (v) => v === true,
+      timeout,
+    );
     return {
       pass,
       name: 'toBeEnabled',
@@ -110,7 +122,11 @@ export const tauriExpect = baseExpect.extend({
 
   async toBeDisabled(locator: LocatorLike, options?: { timeout?: number }) {
     const timeout = getTimeout(options);
-    const { pass } = await pollUntil(() => locator.isDisabled(), (v) => v === true, timeout);
+    const { pass } = await pollUntil(
+      () => locator.isDisabled(),
+      (v) => v === true,
+      timeout,
+    );
     return {
       pass,
       name: 'toBeDisabled',
@@ -123,7 +139,11 @@ export const tauriExpect = baseExpect.extend({
 
   async toBeEditable(locator: LocatorLike, options?: { timeout?: number }) {
     const timeout = getTimeout(options);
-    const { pass } = await pollUntil(() => locator.isEditable(), (v) => v === true, timeout);
+    const { pass } = await pollUntil(
+      () => locator.isEditable(),
+      (v) => v === true,
+      timeout,
+    );
     return {
       pass,
       name: 'toBeEditable',
@@ -136,7 +156,11 @@ export const tauriExpect = baseExpect.extend({
 
   async toBeChecked(locator: LocatorLike, options?: { timeout?: number }) {
     const timeout = getTimeout(options);
-    const { pass } = await pollUntil(() => locator.isChecked(), (v) => v === true, timeout);
+    const { pass } = await pollUntil(
+      () => locator.isChecked(),
+      (v) => v === true,
+      timeout,
+    );
     return {
       pass,
       name: 'toBeChecked',
@@ -149,7 +173,11 @@ export const tauriExpect = baseExpect.extend({
 
   async toBeAttached(locator: LocatorLike, options?: { timeout?: number }) {
     const timeout = getTimeout(options);
-    const { pass } = await pollUntil(() => locator.count(), (c) => c > 0, timeout);
+    const { pass } = await pollUntil(
+      () => locator.count(),
+      (c) => c > 0,
+      timeout,
+    );
     return {
       pass,
       name: 'toBeAttached',
@@ -195,9 +223,7 @@ export const tauriExpect = baseExpect.extend({
       () => locator.textContent(),
       (text) => {
         if (!text) return false;
-        return typeof expected === 'string'
-          ? text.includes(expected)
-          : expected.test(text);
+        return typeof expected === 'string' ? text.includes(expected) : expected.test(text);
       },
       timeout,
     );
@@ -220,9 +246,7 @@ export const tauriExpect = baseExpect.extend({
     const { pass, value } = await pollUntil(
       async () => ((await locator.textContent()) ?? '').trim(),
       (text) => {
-        return typeof expected === 'string'
-          ? text === expected
-          : expected.test(text);
+        return typeof expected === 'string' ? text === expected : expected.test(text);
       },
       timeout,
     );
@@ -244,8 +268,7 @@ export const tauriExpect = baseExpect.extend({
     const timeout = getTimeout(options);
     const { pass, value } = await pollUntil(
       () => locator.inputValue(),
-      (val) =>
-        typeof expected === 'string' ? val === expected : expected.test(val),
+      (val) => (typeof expected === 'string' ? val === expected : expected.test(val)),
       timeout,
     );
     return {
@@ -312,11 +335,7 @@ export const tauriExpect = baseExpect.extend({
     };
   },
 
-  async toHaveId(
-    locator: LocatorLike,
-    expected: string,
-    options?: { timeout?: number },
-  ) {
+  async toHaveId(locator: LocatorLike, expected: string, options?: { timeout?: number }) {
     const timeout = getTimeout(options);
     const { pass, value } = await pollUntil(
       () => locator.getAttribute('id'),
@@ -335,11 +354,7 @@ export const tauriExpect = baseExpect.extend({
 
   // ── Collection assertions ─────────────────────────────────────────
 
-  async toHaveCount(
-    locator: LocatorLike,
-    expected: number,
-    options?: { timeout?: number },
-  ) {
+  async toHaveCount(locator: LocatorLike, expected: number, options?: { timeout?: number }) {
     const timeout = getTimeout(options);
     const { pass, value } = await pollUntil(
       () => locator.count(),
@@ -360,9 +375,7 @@ export const tauriExpect = baseExpect.extend({
 
   async toBeFocused(locator: LocatorLike, options?: { timeout?: number }) {
     const timeout = getTimeout(options);
-    const fn = locator.isFocused
-      ? () => locator.isFocused!()
-      : async () => false;
+    const fn = locator.isFocused ? () => locator.isFocused!() : async () => false;
     const { pass } = await pollUntil(fn, (v) => v === true, timeout);
     return {
       pass,
@@ -384,13 +397,22 @@ export const tauriExpect = baseExpect.extend({
   ) {
     const timeout = getTimeout(options);
     const { pass, value } = await pollUntil(
-      () => locator.getAttribute('style').then(() => {
-        // Use evaluate if available, fall back to getAttribute
-        if ('evaluate' in locator && typeof (locator as any).evaluate === 'function') {
-          return (locator as any).evaluate(`(el) => getComputedStyle(el).getPropertyValue(${JSON.stringify(property)})`) as Promise<string>;
-        }
-        return Promise.resolve('');
-      }),
+      () =>
+        locator.getAttribute('style').then(() => {
+          // Use evaluate if available, fall back to getAttribute
+          if (
+            'evaluate' in locator &&
+            typeof (locator as LocatorLike & { evaluate?: (expr: string) => Promise<string> })
+              .evaluate === 'function'
+          ) {
+            return (
+              locator as LocatorLike & { evaluate: (expr: string) => Promise<string> }
+            ).evaluate(
+              `(el) => getComputedStyle(el).getPropertyValue(${JSON.stringify(property)})`,
+            );
+          }
+          return Promise.resolve('');
+        }),
       (val) => {
         if (!val) return false;
         return typeof expected === 'string' ? val.trim() === expected : expected.test(val);
@@ -409,16 +431,11 @@ export const tauriExpect = baseExpect.extend({
 
   // ── Page-level assertions ─────────────────────────────────────────
 
-  async toHaveURL(
-    page: PageLike,
-    expected: string | RegExp,
-    options?: { timeout?: number },
-  ) {
+  async toHaveURL(page: PageLike, expected: string | RegExp, options?: { timeout?: number }) {
     const timeout = getTimeout(options);
     const { pass, value } = await pollUntil(
       () => page.url(),
-      (url) =>
-        typeof expected === 'string' ? url.includes(expected) : expected.test(url),
+      (url) => (typeof expected === 'string' ? url.includes(expected) : expected.test(url)),
       timeout,
     );
     return {
@@ -431,16 +448,11 @@ export const tauriExpect = baseExpect.extend({
     };
   },
 
-  async toHaveTitle(
-    page: PageLike,
-    expected: string | RegExp,
-    options?: { timeout?: number },
-  ) {
+  async toHaveTitle(page: PageLike, expected: string | RegExp, options?: { timeout?: number }) {
     const timeout = getTimeout(options);
     const { pass, value } = await pollUntil(
       () => page.title(),
-      (title) =>
-        typeof expected === 'string' ? title === expected : expected.test(title),
+      (title) => (typeof expected === 'string' ? title === expected : expected.test(title)),
       timeout,
     );
     return {

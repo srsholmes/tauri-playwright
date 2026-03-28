@@ -10,14 +10,14 @@ describe('generateIpcMockScript', () => {
 
   it('includes mock handlers', () => {
     const script = generateIpcMockScript({
-      greet: (args) => `Hello, ${(args as any)?.name}!`,
+      greet: (args) => `Hello, ${(args as Record<string, unknown>)?.name}!`,
     });
     expect(script).toContain('greet');
     expect(script).toContain('mockHandlers');
   });
 
   it('serializes handler functions as strings', () => {
-    const handler = (args: any) => args?.value * 2;
+    const handler = (args?: Record<string, unknown>) => (args?.value as number) * 2;
     const script = generateIpcMockScript({ double: handler });
     expect(script).toContain('double');
     expect(script).toContain(handler.toString());

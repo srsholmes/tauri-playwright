@@ -2,14 +2,24 @@
   "name": "tauri-playwright",
   "version": "0.0.0",
   "private": true,
+  "type": "module",
   "description": "Playwright E2E testing for Tauri apps",
   "scripts": {
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck",
-    "test:e2e": "pnpm --filter hello-world test:e2e"
+    "test:e2e": "pnpm --filter hello-world test:e2e",
+    "test:unit": "pnpm --filter @srsholmes/tauri-playwright test",
+    "lint": "eslint packages/test/src/",
+    "format": "prettier --write 'packages/test/src/**/*.ts'"
   },
   "devDependencies": {
-    "typescript": "^5.7.2"
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.1.0",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-prettier": "^5.5.5",
+    "prettier": "^3.8.1",
+    "typescript": "^5.7.2",
+    "typescript-eslint": "^8.57.2"
   },
   "packageManager": "pnpm@9.15.4"
 }

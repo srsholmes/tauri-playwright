@@ -2,7 +2,7 @@ import { test, expect } from '../fixtures';
 
 test.describe('Screenshot & Trace', () => {
   test('explicit native screenshot', async ({ tauriPage }) => {
-    const buf = await (tauriPage as any).screenshot();
+    const buf = await tauriPage.screenshot();
     await test.info().attach('native-screenshot', {
       body: buf,
       contentType: 'image/png',
@@ -12,7 +12,7 @@ test.describe('Screenshot & Trace', () => {
 
   test('should fail - wrong heading text', async ({ tauriPage }) => {
     // Capture native screenshot before the assertion fails
-    const buf = await (tauriPage as any).screenshot();
+    const buf = await tauriPage.screenshot();
     await test.info().attach('before-failure', {
       body: buf,
       contentType: 'image/png',

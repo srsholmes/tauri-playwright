@@ -24,7 +24,7 @@
  * ```
  */
 export function generateIpcMockScript(
-  mocks: Record<string, (args?: Record<string, unknown>) => unknown>
+  mocks: Record<string, (args?: Record<string, unknown>) => unknown>,
 ): string {
   // Serialize handlers as functions that run at invoke time (dynamic mocks)
   const mockEntries = Object.entries(mocks).map(([cmd, handler]) => {
@@ -136,7 +136,11 @@ declare global {
     __TAURI_MOCK_CALLS__: Array<{ cmd: string; args: Record<string, unknown>; timestamp: number }>;
     __TAURI_MOCK_LISTENERS__: Record<string, string[]>;
     __TAURI_EMIT_MOCK_EVENT__: (event: string, payload: unknown) => void;
-    __TAURI_GET_MOCK_CALLS__: () => Array<{ cmd: string; args: Record<string, unknown>; timestamp: number }>;
+    __TAURI_GET_MOCK_CALLS__: () => Array<{
+      cmd: string;
+      args: Record<string, unknown>;
+      timestamp: number;
+    }>;
     __TAURI_CLEAR_MOCK_CALLS__: () => void;
     __TAURI_INTERNALS__: {
       invoke: (cmd: string, args?: Record<string, unknown>) => Promise<unknown>;

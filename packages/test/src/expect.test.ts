@@ -29,9 +29,7 @@ describe('tauriExpect matchers', () => {
 
     it('fails when element is not visible', async () => {
       const loc = createFakeLocator({ isVisible: vi.fn(async () => false) });
-      await vitestExpect(
-        tauriExpect(loc).toBeVisible({ timeout: 200 })
-      ).rejects.toThrow();
+      await vitestExpect(tauriExpect(loc).toBeVisible({ timeout: 200 })).rejects.toThrow();
     });
 
     it('.not.toBeVisible passes when hidden', async () => {
@@ -76,9 +74,7 @@ describe('tauriExpect matchers', () => {
 
     it('fails when not checked', async () => {
       const loc = createFakeLocator({ isChecked: vi.fn(async () => false) });
-      await vitestExpect(
-        tauriExpect(loc).toBeChecked({ timeout: 200 })
-      ).rejects.toThrow();
+      await vitestExpect(tauriExpect(loc).toBeChecked({ timeout: 200 })).rejects.toThrow();
     });
   });
 
@@ -90,9 +86,7 @@ describe('tauriExpect matchers', () => {
 
     it('fails when count is 0', async () => {
       const loc = createFakeLocator({ count: vi.fn(async () => 0) });
-      await vitestExpect(
-        tauriExpect(loc).toBeAttached({ timeout: 200 })
-      ).rejects.toThrow();
+      await vitestExpect(tauriExpect(loc).toBeAttached({ timeout: 200 })).rejects.toThrow();
     });
   });
 
@@ -104,9 +98,7 @@ describe('tauriExpect matchers', () => {
 
     it('fails when inputValue has content', async () => {
       const loc = createFakeLocator({ inputValue: vi.fn(async () => 'not empty') });
-      await vitestExpect(
-        tauriExpect(loc).toBeEmpty({ timeout: 200 })
-      ).rejects.toThrow();
+      await vitestExpect(tauriExpect(loc).toBeEmpty({ timeout: 200 })).rejects.toThrow();
     });
   });
 
@@ -121,7 +113,7 @@ describe('tauriExpect matchers', () => {
     it('fails when text does not contain substring', async () => {
       const loc = createFakeLocator({ textContent: vi.fn(async () => 'Hello') });
       await vitestExpect(
-        tauriExpect(loc).toContainText('Missing', { timeout: 200 })
+        tauriExpect(loc).toContainText('Missing', { timeout: 200 }),
       ).rejects.toThrow();
     });
 
@@ -176,7 +168,7 @@ describe('tauriExpect matchers', () => {
     it('fails when attribute is null', async () => {
       const loc = createFakeLocator({ getAttribute: vi.fn(async () => null) });
       await vitestExpect(
-        tauriExpect(loc).toHaveAttribute('missing', undefined, { timeout: 200 })
+        tauriExpect(loc).toHaveAttribute('missing', undefined, { timeout: 200 }),
       ).rejects.toThrow();
     });
 
@@ -215,9 +207,7 @@ describe('tauriExpect matchers', () => {
 
     it('fails when count differs', async () => {
       const loc = createFakeLocator({ count: vi.fn(async () => 3) });
-      await vitestExpect(
-        tauriExpect(loc).toHaveCount(5, { timeout: 200 })
-      ).rejects.toThrow();
+      await vitestExpect(tauriExpect(loc).toHaveCount(5, { timeout: 200 })).rejects.toThrow();
     });
 
     it('.not.toHaveCount works', async () => {
@@ -244,9 +234,7 @@ describe('tauriExpect matchers', () => {
     it('respects timeout', async () => {
       const start = Date.now();
       const loc = createFakeLocator({ isVisible: vi.fn(async () => false) });
-      await vitestExpect(
-        tauriExpect(loc).toBeVisible({ timeout: 300 })
-      ).rejects.toThrow();
+      await vitestExpect(tauriExpect(loc).toBeVisible({ timeout: 300 })).rejects.toThrow();
       const elapsed = Date.now() - start;
       vitestExpect(elapsed).toBeGreaterThanOrEqual(250);
       vitestExpect(elapsed).toBeLessThan(1000);
