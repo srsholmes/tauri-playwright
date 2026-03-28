@@ -42,8 +42,12 @@
     "webview"
   ],
   "license": "MIT",
+  "homepage": "https://github.com/srsholmes/tauri-playwright",
   "repository": {
     "type": "git",
     "url": "https://github.com/srsholmes/tauri-playwright"
+  },
+  "engines": {
+    "node": ">=18"
   }
 }

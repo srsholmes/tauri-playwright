@@ -5,6 +5,9 @@ edition = "2021"
 description = "Tauri plugin that enables Playwright E2E testing by embedding a control server in the app"
 license = "MIT"
 repository = "https://github.com/srsholmes/tauri-playwright"
+homepage = "https://github.com/srsholmes/tauri-playwright"
+readme = "../../README.md"
+authors = ["Simon Holmes"]
 keywords = ["tauri", "playwright", "testing", "e2e", "webdriver"]
 
 [dependencies]
