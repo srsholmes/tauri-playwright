@@ -163,12 +163,41 @@ pub enum Command {
         timeout_ms: u64,
     },
 
+    /// Dispatch a custom DOM event on an element
+    DispatchEvent {
+        selector: String,
+        event_type: String,
+        #[serde(default = "default_timeout")]
+        timeout_ms: u64,
+    },
+
+    /// Get computed CSS style value
+    GetComputedStyle {
+        selector: String,
+        property: String,
+        #[serde(default = "default_timeout")]
+        timeout_ms: u64,
+    },
+
+    /// Check if an element is focused
+    IsFocused { selector: String },
+
     // ── Page info (no selector) ───────────────────────────────────────
 
     Title,
     Url,
     Content,
     Goto { url: String },
+    Reload,
+    GoBack,
+    GoForward,
+
+    /// Wait for the URL to match a pattern
+    WaitForUrl {
+        pattern: String,
+        #[serde(default = "default_timeout")]
+        timeout_ms: u64,
+    },
 
     // ── Dialogs ───────────────────────────────────────────────────────
 

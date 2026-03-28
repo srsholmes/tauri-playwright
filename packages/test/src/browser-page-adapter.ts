@@ -161,6 +161,37 @@ export class BrowserPageAdapter {
     await this.page.goto(url);
   }
 
+  async reload(): Promise<void> {
+    await this.page.reload();
+  }
+
+  async goBack(): Promise<void> {
+    await this.page.goBack();
+  }
+
+  async goForward(): Promise<void> {
+    await this.page.goForward();
+  }
+
+  async waitForURL(pattern: string, options?: { timeout?: number }): Promise<void> {
+    await this.page.waitForURL(`**${pattern}**`, options);
+  }
+
+  async isFocused(selector: string): Promise<boolean> {
+    return this.page.locator(selector).evaluate((el) => document.activeElement === el);
+  }
+
+  async getComputedStyle(selector: string, property: string): Promise<string> {
+    return this.page.locator(selector).evaluate(
+      (el, prop) => getComputedStyle(el).getPropertyValue(prop),
+      property,
+    );
+  }
+
+  async dispatchEvent(selector: string, eventType: string): Promise<void> {
+    await this.page.locator(selector).dispatchEvent(eventType);
+  }
+
   // ── Drag and drop ───────────────────────────────────────────────────
   async dragAndDrop(source: string, target: string): Promise<void> {
     await this.page.dragAndDrop(source, target);

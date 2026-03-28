@@ -223,6 +223,43 @@ export class TauriPage {
     await this.command('goto', { url });
   }
 
+  /** Reload the page. */
+  async reload(): Promise<void> {
+    await this.command('reload', {});
+  }
+
+  /** Navigate back in history. */
+  async goBack(): Promise<void> {
+    await this.command('go_back', {});
+  }
+
+  /** Navigate forward in history. */
+  async goForward(): Promise<void> {
+    await this.command('go_forward', {});
+  }
+
+  /** Wait for the URL to contain or match a pattern. */
+  async waitForURL(pattern: string, options?: TimeoutOption): Promise<void> {
+    await this.command('wait_for_url', { pattern, timeout_ms: this._t(options) });
+  }
+
+  /** Check if an element is the active/focused element. */
+  async isFocused(selector: string): Promise<boolean> {
+    const resp = await this.command('is_focused', { selector });
+    return resp.data as boolean;
+  }
+
+  /** Get a computed CSS style value from an element. Auto-waits. */
+  async getComputedStyle(selector: string, property: string, options?: TimeoutOption): Promise<string> {
+    const resp = await this.command('get_computed_style', { selector, property, timeout_ms: this._t(options) });
+    return resp.data as string;
+  }
+
+  /** Dispatch a custom DOM event on an element. Auto-waits. */
+  async dispatchEvent(selector: string, eventType: string, options?: TimeoutOption): Promise<void> {
+    await this.command('dispatch_event', { selector, event_type: eventType, timeout_ms: this._t(options) });
+  }
+
   // ── Drag and drop ───────────────────────────────────────────────────────
 
   /** Drag one element onto another. Auto-waits. */
@@ -548,6 +585,38 @@ export class TauriLocator {
 
   async clear(): Promise<void> {
     return this.fill('');
+  }
+
+  /** Type text character-by-character (Playwright's replacement for deprecated type()). */
+  async pressSequentially(text: string, options?: { delay?: number }): Promise<void> {
+    if (!this._jsFind) {
+      return this.page.type(this.selector, text);
+    }
+    for (const char of text) {
+      await this.press(char);
+      if (options?.delay) await new Promise((r) => setTimeout(r, options.delay));
+    }
+  }
+
+  /** Dispatch a custom DOM event on the element. */
+  async dispatchEvent(eventType: string, options?: TimeoutOption): Promise<void> {
+    if (!this._jsFind) return this.page.dispatchEvent(this.selector, eventType, options);
+    const e = JSON.stringify(eventType);
+    await this._eval(this._actionScript(`el.dispatchEvent(new Event(${e},{bubbles:true})); return null`));
+  }
+
+  /** Run a JS function on the matched element. The function receives `el` as argument. */
+  async evaluate<T = unknown>(fn: string): Promise<T> {
+    if (!this._jsFind) {
+      return this.page.evaluate<T>(`(function(){ var el=document.querySelector(${JSON.stringify(this.selector)}); if(!el) throw new Error('not found'); return (${fn})(el); })()`);
+    }
+    return this._eval(`(function(){ var el=${this._jsFind}; if(!el) throw new Error('not found'); return (${fn})(el); })()`);
+  }
+
+  /** Check if this element is the active/focused element. */
+  async isFocused(): Promise<boolean> {
+    if (!this._jsFind) return this.page.isFocused(this.selector);
+    return this._eval(`(function(){ var el=${this._jsFind}; return el!==null&&document.activeElement===el; })()`);
   }
 
   async scrollIntoViewIfNeeded(): Promise<void> {

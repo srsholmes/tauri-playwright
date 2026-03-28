@@ -528,11 +528,45 @@ async fn execute_command(
         Command::ClearNetworkRequests => {
             eval_js(pending, queue, "(function(){ window.__pw_net_requests=[]; return null; })()").await
         }
+        Command::DispatchEvent { selector, event_type, timeout_ms } => {
+            let e = json_str(&event_type);
+            eval_js(pending, queue, &action_js(&selector, timeout_ms, &format!(
+                "el.dispatchEvent(new Event({e},{{bubbles:true}})); return null", e=e
+            ))).await
+        }
+        Command::GetComputedStyle { selector, property, timeout_ms } => {
+            let p = json_str(&property);
+            eval_js(pending, queue, &query_js(&selector, timeout_ms, &format!(
+                "getComputedStyle(el).getPropertyValue({p})", p=p
+            ))).await
+        }
+        Command::IsFocused { selector } => {
+            let s = json_str(&selector);
+            eval_js(pending, queue, &format!(
+                r#"(function(){{ var el=document.querySelector({s}); return el!==null&&document.activeElement===el; }})()"#, s=s
+            )).await
+        }
         Command::Title => eval_js(pending, queue, "document.title").await,
         Command::Url => eval_js(pending, queue, "window.location.href").await,
         Command::Goto { url } => {
             let u = json_str(&url);
             eval_js(pending, queue, &format!(r#"(function(){{ window.location.href={u}; return null; }})()"#, u=u)).await
+        }
+        Command::Reload => {
+            eval_js(pending, queue, "(function(){ window.location.reload(); return null; })()").await
+        }
+        Command::GoBack => {
+            eval_js(pending, queue, "(function(){ window.history.back(); return null; })()").await
+        }
+        Command::GoForward => {
+            eval_js(pending, queue, "(function(){ window.history.forward(); return null; })()").await
+        }
+        Command::WaitForUrl { pattern, timeout_ms } => {
+            let p = json_str(&pattern);
+            eval_js(pending, queue, &format!(
+                r#"(async function(){{ var dl=Date.now()+{t}; while(Date.now()<dl){{ if(window.location.href.includes({p})||new RegExp({p}).test(window.location.href)) return window.location.href; await new Promise(function(r){{setTimeout(r,100)}}); }} throw new Error('timeout waiting for URL matching '+{p}); }})()"#,
+                p=p, t=timeout_ms
+            )).await
         }
         Command::Screenshot { path } => {
             take_screenshot(pending, queue, path).await

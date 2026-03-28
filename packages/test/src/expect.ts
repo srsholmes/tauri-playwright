@@ -33,11 +33,20 @@ export interface LocatorLike {
   isDisabled(): Promise<boolean>;
   isEditable(): Promise<boolean>;
   isChecked(): Promise<boolean>;
+  isFocused?(): Promise<boolean>;
   textContent(): Promise<string | null>;
   innerText(): Promise<string>;
   inputValue(): Promise<string>;
   getAttribute(name: string): Promise<string | null>;
   count(): Promise<number>;
+}
+
+/**
+ * Page-like object for page-level assertions (toHaveURL, toHaveTitle).
+ */
+export interface PageLike {
+  url(): Promise<string>;
+  title(): Promise<string>;
 }
 
 const DEFAULT_TIMEOUT = 5000;
@@ -344,6 +353,103 @@ export const tauriExpect = baseExpect.extend({
         this.isNot
           ? `expected count ${value} not to be ${expected}`
           : `expected count ${value} to be ${expected}`,
+    };
+  },
+
+  // ── Focus assertion ───────────────────────────────────────────────
+
+  async toBeFocused(locator: LocatorLike, options?: { timeout?: number }) {
+    const timeout = getTimeout(options);
+    const fn = locator.isFocused
+      ? () => locator.isFocused!()
+      : async () => false;
+    const { pass } = await pollUntil(fn, (v) => v === true, timeout);
+    return {
+      pass,
+      name: 'toBeFocused',
+      message: () =>
+        this.isNot
+          ? `expected element not to be focused`
+          : `expected element to be focused within ${timeout}ms`,
+    };
+  },
+
+  // ── CSS assertion ─────────────────────────────────────────────────
+
+  async toHaveCSS(
+    locator: LocatorLike,
+    property: string,
+    expected: string | RegExp,
+    options?: { timeout?: number },
+  ) {
+    const timeout = getTimeout(options);
+    const { pass, value } = await pollUntil(
+      () => locator.getAttribute('style').then(() => {
+        // Use evaluate if available, fall back to getAttribute
+        if ('evaluate' in locator && typeof (locator as any).evaluate === 'function') {
+          return (locator as any).evaluate(`(el) => getComputedStyle(el).getPropertyValue(${JSON.stringify(property)})`) as Promise<string>;
+        }
+        return Promise.resolve('');
+      }),
+      (val) => {
+        if (!val) return false;
+        return typeof expected === 'string' ? val.trim() === expected : expected.test(val);
+      },
+      timeout,
+    );
+    return {
+      pass,
+      name: 'toHaveCSS',
+      message: () =>
+        this.isNot
+          ? `expected CSS "${property}" not to be "${expected}", got "${value}"`
+          : `expected CSS "${property}" to be "${expected}", got "${value}"`,
+    };
+  },
+
+  // ── Page-level assertions ─────────────────────────────────────────
+
+  async toHaveURL(
+    page: PageLike,
+    expected: string | RegExp,
+    options?: { timeout?: number },
+  ) {
+    const timeout = getTimeout(options);
+    const { pass, value } = await pollUntil(
+      () => page.url(),
+      (url) =>
+        typeof expected === 'string' ? url.includes(expected) : expected.test(url),
+      timeout,
+    );
+    return {
+      pass,
+      name: 'toHaveURL',
+      message: () =>
+        this.isNot
+          ? `expected URL "${value}" not to match "${expected}"`
+          : `expected URL "${value}" to match "${expected}"`,
+    };
+  },
+
+  async toHaveTitle(
+    page: PageLike,
+    expected: string | RegExp,
+    options?: { timeout?: number },
+  ) {
+    const timeout = getTimeout(options);
+    const { pass, value } = await pollUntil(
+      () => page.title(),
+      (title) =>
+        typeof expected === 'string' ? title === expected : expected.test(title),
+      timeout,
+    );
+    return {
+      pass,
+      name: 'toHaveTitle',
+      message: () =>
+        this.isNot
+          ? `expected title "${value}" not to match "${expected}"`
+          : `expected title "${value}" to match "${expected}"`,
     };
   },
 });
