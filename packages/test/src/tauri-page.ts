@@ -5,8 +5,21 @@ import { PluginClient, type PluginResponse } from './socket-client.js';
  * A Playwright-like Page API backed by the tauri-plugin-playwright socket bridge.
  * Commands are sent to the plugin, which injects JS into the real Tauri webview.
  */
+export type TimeoutOption = { timeout?: number };
+
 export class TauriPage {
+  private _defaultTimeout = 5000;
+
   constructor(private client: PluginClient) {}
+
+  /** Set the default timeout for all auto-waiting operations (ms). */
+  setDefaultTimeout(timeout: number): void {
+    this._defaultTimeout = timeout;
+  }
+
+  private _t(options?: TimeoutOption): number {
+    return options?.timeout ?? this._defaultTimeout;
+  }
 
   // ── Evaluation ──────────────────────────────────────────────────────────
 
@@ -18,111 +31,112 @@ export class TauriPage {
 
   // ── Interactions ────────────────────────────────────────────────────────
 
-  /** Click an element matching the CSS selector. */
-  async click(selector: string): Promise<void> {
-    await this.command('click', { selector });
+  /** Click an element matching the CSS selector. Auto-waits. */
+  async click(selector: string, options?: TimeoutOption): Promise<void> {
+    await this.command('click', { selector, timeout_ms: this._t(options) });
   }
 
-  /** Double-click an element. */
-  async dblclick(selector: string): Promise<void> {
-    await this.command('dblclick', { selector });
+  /** Double-click an element. Auto-waits. */
+  async dblclick(selector: string, options?: TimeoutOption): Promise<void> {
+    await this.command('dblclick', { selector, timeout_ms: this._t(options) });
   }
 
-  /** Hover over an element. */
-  async hover(selector: string): Promise<void> {
-    await this.command('hover', { selector });
+  /** Hover over an element. Auto-waits. */
+  async hover(selector: string, options?: TimeoutOption): Promise<void> {
+    await this.command('hover', { selector, timeout_ms: this._t(options) });
   }
 
-  /** Clear and fill an input element with text. */
-  async fill(selector: string, text: string): Promise<void> {
-    await this.command('fill', { selector, text });
+  /** Clear and fill an input element with text. Auto-waits. */
+  async fill(selector: string, text: string, options?: TimeoutOption): Promise<void> {
+    await this.command('fill', { selector, text, timeout_ms: this._t(options) });
   }
 
-  /** Type text character by character into an element. */
-  async type(selector: string, text: string): Promise<void> {
-    await this.command('type_text', { selector, text });
+  /** Type text character by character into an element. Auto-waits. */
+  async type(selector: string, text: string, options?: TimeoutOption): Promise<void> {
+    await this.command('type_text', { selector, text, timeout_ms: this._t(options) });
   }
 
-  /** Press a key on an element (e.g., 'Enter', 'Tab', 'Escape'). */
-  async press(selector: string, key: string): Promise<void> {
-    await this.command('press', { selector, key });
+  /** Press a key on an element (e.g., 'Enter', 'Tab', 'Escape'). Auto-waits. */
+  async press(selector: string, key: string, options?: TimeoutOption): Promise<void> {
+    await this.command('press', { selector, key, timeout_ms: this._t(options) });
   }
 
-  /** Check a checkbox or radio button. */
-  async check(selector: string): Promise<void> {
-    await this.command('check', { selector });
+  /** Check a checkbox or radio button. Auto-waits. */
+  async check(selector: string, options?: TimeoutOption): Promise<void> {
+    await this.command('check', { selector, timeout_ms: this._t(options) });
   }
 
-  /** Uncheck a checkbox. */
-  async uncheck(selector: string): Promise<void> {
-    await this.command('uncheck', { selector });
+  /** Uncheck a checkbox. Auto-waits. */
+  async uncheck(selector: string, options?: TimeoutOption): Promise<void> {
+    await this.command('uncheck', { selector, timeout_ms: this._t(options) });
   }
 
-  /** Select an option from a <select> element by value. */
-  async selectOption(selector: string, value: string): Promise<string> {
-    const resp = await this.command('select_option', { selector, value });
+  /** Select an option from a <select> element by value. Auto-waits. */
+  async selectOption(selector: string, value: string, options?: TimeoutOption): Promise<string> {
+    const resp = await this.command('select_option', { selector, value, timeout_ms: this._t(options) });
     return resp.data as string;
   }
 
-  /** Focus an element. */
-  async focus(selector: string): Promise<void> {
-    await this.command('focus', { selector });
+  /** Focus an element. Auto-waits. */
+  async focus(selector: string, options?: TimeoutOption): Promise<void> {
+    await this.command('focus', { selector, timeout_ms: this._t(options) });
   }
 
-  /** Blur (unfocus) an element. */
-  async blur(selector: string): Promise<void> {
-    await this.command('blur', { selector });
+  /** Blur (unfocus) an element. Auto-waits. */
+  async blur(selector: string, options?: TimeoutOption): Promise<void> {
+    await this.command('blur', { selector, timeout_ms: this._t(options) });
   }
 
   // ── Queries ─────────────────────────────────────────────────────────────
 
-  /** Get the text content of an element. */
-  async textContent(selector: string): Promise<string | null> {
-    const resp = await this.command('text_content', { selector });
+  /** Get the text content of an element. Auto-waits for element. */
+  async textContent(selector: string, options?: TimeoutOption): Promise<string | null> {
+    const resp = await this.command('text_content', { selector, timeout_ms: this._t(options) });
     return resp.data as string | null;
   }
 
-  /** Get the innerHTML of an element. */
-  async innerHTML(selector: string): Promise<string> {
-    const resp = await this.command('inner_html', { selector });
+  /** Get the innerHTML of an element. Auto-waits for element. */
+  async innerHTML(selector: string, options?: TimeoutOption): Promise<string> {
+    const resp = await this.command('inner_html', { selector, timeout_ms: this._t(options) });
     return resp.data as string;
   }
 
-  /** Get the innerText of an element (visible text only). */
-  async innerText(selector: string): Promise<string> {
-    const resp = await this.command('inner_text', { selector });
+  /** Get the innerText of an element (visible text only). Auto-waits for element. */
+  async innerText(selector: string, options?: TimeoutOption): Promise<string> {
+    const resp = await this.command('inner_text', { selector, timeout_ms: this._t(options) });
     return resp.data as string;
   }
 
-  /** Get textContent of all elements matching a selector. */
+  /** Get textContent of all elements matching a selector. No wait (works on zero matches). */
   async allTextContents(selector: string): Promise<string[]> {
     const resp = await this.command('all_text_contents', { selector });
     return resp.data as string[];
   }
 
-  /** Get innerText of all elements matching a selector. */
+  /** Get innerText of all elements matching a selector. No wait (works on zero matches). */
   async allInnerTexts(selector: string): Promise<string[]> {
     const resp = await this.command('all_inner_texts', { selector });
     return resp.data as string[];
   }
 
-  /** Get an attribute value from an element. */
-  async getAttribute(selector: string, name: string): Promise<string | null> {
-    const resp = await this.command('get_attribute', { selector, name });
+  /** Get an attribute value from an element. Auto-waits for element. */
+  async getAttribute(selector: string, name: string, options?: TimeoutOption): Promise<string | null> {
+    const resp = await this.command('get_attribute', { selector, name, timeout_ms: this._t(options) });
     return resp.data as string | null;
   }
 
-  /** Get the input value of a form element. */
-  async inputValue(selector: string): Promise<string> {
-    const resp = await this.command('input_value', { selector });
+  /** Get the input value of a form element. Auto-waits for element. */
+  async inputValue(selector: string, options?: TimeoutOption): Promise<string> {
+    const resp = await this.command('input_value', { selector, timeout_ms: this._t(options) });
     return (resp.data as string) ?? '';
   }
 
-  /** Get the bounding box of an element. */
+  /** Get the bounding box of an element. Auto-waits for element. */
   async boundingBox(
     selector: string,
+    options?: TimeoutOption,
   ): Promise<{ x: number; y: number; width: number; height: number } | null> {
-    const resp = await this.command('bounding_box', { selector });
+    const resp = await this.command('bounding_box', { selector, timeout_ms: this._t(options) });
     return resp.data as { x: number; y: number; width: number; height: number } | null;
   }
 
@@ -211,9 +225,9 @@ export class TauriPage {
 
   // ── Drag and drop ───────────────────────────────────────────────────────
 
-  /** Drag one element onto another. */
-  async dragAndDrop(source: string, target: string): Promise<void> {
-    await this.command('drag_and_drop', { source, target });
+  /** Drag one element onto another. Auto-waits. */
+  async dragAndDrop(source: string, target: string, options?: TimeoutOption): Promise<void> {
+    await this.command('drag_and_drop', { source, target, timeout_ms: this._t(options) });
   }
 
   // ── File upload ─────────────────────────────────────────────────────────
@@ -222,13 +236,14 @@ export class TauriPage {
   async setInputFiles(
     selector: string,
     files: Array<{ name: string; mimeType: string; buffer: Buffer }>,
+    options?: TimeoutOption,
   ): Promise<number> {
     const payload = files.map((f) => ({
       name: f.name,
       mime_type: f.mimeType,
       base64: f.buffer.toString('base64'),
     }));
-    const resp = await this.command('set_input_files', { selector, files: payload });
+    const resp = await this.command('set_input_files', { selector, files: payload, timeout_ms: this._t(options) });
     return resp.data as number;
   }
 

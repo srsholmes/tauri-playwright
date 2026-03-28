@@ -8,6 +8,11 @@ import type { Page } from '@playwright/test';
 export class BrowserPageAdapter {
   constructor(private page: Page) {}
 
+  /** Set the default timeout for all auto-waiting operations (ms). */
+  setDefaultTimeout(timeout: number): void {
+    this.page.setDefaultTimeout(timeout);
+  }
+
   // ── Expose the underlying Playwright Page for direct access ─────────
   get playwrightPage(): Page {
     return this.page;

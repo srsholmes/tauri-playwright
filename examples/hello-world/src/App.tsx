@@ -11,6 +11,7 @@ export default function App() {
   const [uploadedFile, setUploadedFile] = useState('');
   const [dialogResult, setDialogResult] = useState('');
   const [dragResult, setDragResult] = useState('');
+  const [delayedVisible, setDelayedVisible] = useState(false);
   const [apiData, setApiData] = useState<string[]>([]);
   const [apiLoading, setApiLoading] = useState(false);
   const [apiError, setApiError] = useState('');
@@ -161,6 +162,23 @@ export default function App() {
         )}
         {!apiLoading && !apiError && apiData.length === 0 && (
           <p data-testid="api-empty" style={{ color: '#666' }}>No data yet. Click Fetch Users.</p>
+        )}
+      </section>
+
+      {/* Delayed Element Section (for auto-waiting tests) */}
+      <section data-testid="delayed-section" style={{ marginTop: 32 }}>
+        <h2>Delayed Element</h2>
+        <button
+          data-testid="btn-show-delayed"
+          onClick={() => {
+            setDelayedVisible(false);
+            setTimeout(() => setDelayedVisible(true), 1000);
+          }}
+        >
+          Show After 1s
+        </button>
+        {delayedVisible && (
+          <p data-testid="delayed-element">I appeared after a delay!</p>
         )}
       </section>
 

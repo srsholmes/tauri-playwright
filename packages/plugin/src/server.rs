@@ -220,6 +220,26 @@ fn json_str(s: &str) -> String {
     serde_json::to_string(s).unwrap()
 }
 
+/// Generate JS that auto-waits for an element to be visible + enabled, then runs an action.
+/// The action_body has access to `el` (the found element).
+fn action_js(selector: &str, timeout_ms: u64, action_body: &str) -> String {
+    let s = json_str(selector);
+    format!(
+        r#"(async function(){{ var dl=Date.now()+{t}; while(Date.now()<dl){{ var el=document.querySelector({s}); if(el){{ var r=el.getBoundingClientRect(); var st=getComputedStyle(el); if(r.width>0&&r.height>0&&st.visibility!=='hidden'&&st.display!=='none'&&parseFloat(st.opacity)>0){{ {action}; }} }} await new Promise(function(r){{setTimeout(r,50)}}); }} throw new Error('timeout ('+{t}+'ms) waiting for '+{s}); }})()"#,
+        s=s, t=timeout_ms, action=action_body
+    )
+}
+
+/// Generate JS that auto-waits for an element to exist, then returns a value.
+/// The return_expr has access to `el` (the found element).
+fn query_js(selector: &str, timeout_ms: u64, return_expr: &str) -> String {
+    let s = json_str(selector);
+    format!(
+        r#"(async function(){{ var dl=Date.now()+{t}; while(Date.now()<dl){{ var el=document.querySelector({s}); if(el){{ return {ret}; }} await new Promise(function(r){{setTimeout(r,50)}}); }} throw new Error('timeout ('+{t}+'ms) waiting for '+{s}); }})()"#,
+        s=s, t=timeout_ms, ret=return_expr
+    )
+}
+
 async fn execute_command(
     pending: &PendingResults,
     queue: &CommandQueue,
@@ -229,81 +249,160 @@ async fn execute_command(
     match cmd {
         Command::Ping => Response::ok(serde_json::json!("pong")),
         Command::Eval { script } => eval_js(pending, queue, &script).await,
-        Command::Click { selector } => {
-            let s = json_str(&selector);
-            eval_js(pending, queue, &format!(
-                r#"(function(){{ var el=document.querySelector({s}); if(!el) throw new Error('not found: '+{s}); el.scrollIntoView({{block:'center'}}); el.click(); return null; }})()"#, s=s
+
+        // ── Actions (auto-wait for visible + enabled) ─────────────────
+
+        Command::Click { selector, timeout_ms } => {
+            eval_js(pending, queue, &action_js(&selector, timeout_ms,
+                "el.scrollIntoView({block:'center'}); el.click(); return null"
             )).await
         }
-        Command::Fill { selector, text } => {
-            let s = json_str(&selector);
+        Command::Dblclick { selector, timeout_ms } => {
+            eval_js(pending, queue, &action_js(&selector, timeout_ms,
+                "el.scrollIntoView({block:'center'}); el.dispatchEvent(new MouseEvent('dblclick',{bubbles:true})); return null"
+            )).await
+        }
+        Command::Hover { selector, timeout_ms } => {
+            eval_js(pending, queue, &action_js(&selector, timeout_ms,
+                "el.scrollIntoView({block:'center'}); var r2=el.getBoundingClientRect(); var cx=r2.left+r2.width/2; var cy=r2.top+r2.height/2; el.dispatchEvent(new MouseEvent('mouseenter',{bubbles:true,clientX:cx,clientY:cy})); el.dispatchEvent(new MouseEvent('mouseover',{bubbles:true,clientX:cx,clientY:cy})); return null"
+            )).await
+        }
+        Command::Fill { selector, text, timeout_ms } => {
             let t = json_str(&text);
-            eval_js(pending, queue, &format!(
-                r#"(function(){{ var el=document.querySelector({s}); if(!el) throw new Error('not found: '+{s}); el.focus(); var desc=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value'); if(desc&&desc.set) desc.set.call(el,{t}); else el.value={t}; el.dispatchEvent(new Event('input',{{bubbles:true}})); el.dispatchEvent(new Event('change',{{bubbles:true}})); return null; }})()"#, s=s, t=t
-            )).await
+            eval_js(pending, queue, &action_js(&selector, timeout_ms, &format!(
+                "el.focus(); var desc=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value'); if(desc&&desc.set) desc.set.call(el,{t}); else el.value={t}; el.dispatchEvent(new Event('input',{{bubbles:true}})); el.dispatchEvent(new Event('change',{{bubbles:true}})); return null", t=t
+            ))).await
         }
-        Command::TypeText { selector, text } => {
-            let s = json_str(&selector);
+        Command::TypeText { selector, text, timeout_ms } => {
             let t = json_str(&text);
-            eval_js(pending, queue, &format!(
-                r#"(function(){{ var el=document.querySelector({s}); if(!el) throw new Error('not found: '+{s}); el.focus(); for(var i=0;i<{t}.length;i++){{ var ch={t}[i]; el.dispatchEvent(new KeyboardEvent('keydown',{{key:ch,bubbles:true}})); var desc=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value'); if(desc&&desc.set) desc.set.call(el,el.value+ch); else el.value+=ch; el.dispatchEvent(new Event('input',{{bubbles:true}})); el.dispatchEvent(new KeyboardEvent('keyup',{{key:ch,bubbles:true}})); }} return null; }})()"#, s=s, t=t
-            )).await
+            eval_js(pending, queue, &action_js(&selector, timeout_ms, &format!(
+                "el.focus(); for(var i=0;i<{t}.length;i++){{ var ch={t}[i]; el.dispatchEvent(new KeyboardEvent('keydown',{{key:ch,bubbles:true}})); var desc=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value'); if(desc&&desc.set) desc.set.call(el,el.value+ch); else el.value+=ch; el.dispatchEvent(new Event('input',{{bubbles:true}})); el.dispatchEvent(new KeyboardEvent('keyup',{{key:ch,bubbles:true}})); }} return null", t=t
+            ))).await
         }
-        Command::Press { selector, key } => {
-            let s = json_str(&selector);
+        Command::Press { selector, key, timeout_ms } => {
             let k = json_str(&key);
-            eval_js(pending, queue, &format!(
-                r#"(function(){{ var el=document.querySelector({s}); if(!el) throw new Error('not found: '+{s}); el.focus(); var o={{key:{k},bubbles:true}}; el.dispatchEvent(new KeyboardEvent('keydown',o)); el.dispatchEvent(new KeyboardEvent('keypress',o)); el.dispatchEvent(new KeyboardEvent('keyup',o)); return null; }})()"#, s=s, k=k
+            eval_js(pending, queue, &action_js(&selector, timeout_ms, &format!(
+                "el.focus(); var o={{key:{k},bubbles:true}}; el.dispatchEvent(new KeyboardEvent('keydown',o)); el.dispatchEvent(new KeyboardEvent('keypress',o)); el.dispatchEvent(new KeyboardEvent('keyup',o)); return null", k=k
+            ))).await
+        }
+        Command::Check { selector, timeout_ms } => {
+            eval_js(pending, queue, &action_js(&selector, timeout_ms,
+                "if(!el.checked){ el.click(); } return null"
             )).await
         }
-        Command::TextContent { selector } => {
-            let s = json_str(&selector);
-            eval_js(pending, queue, &format!(
-                r#"(function(){{ var el=document.querySelector({s}); if(!el) throw new Error('not found: '+{s}); return el.textContent; }})()"#, s=s
+        Command::Uncheck { selector, timeout_ms } => {
+            eval_js(pending, queue, &action_js(&selector, timeout_ms,
+                "if(el.checked){ el.click(); } return null"
             )).await
         }
-        Command::GetAttribute { selector, name } => {
-            let s = json_str(&selector);
+        Command::SelectOption { selector, value, timeout_ms } => {
+            let v = json_str(&value);
+            eval_js(pending, queue, &action_js(&selector, timeout_ms, &format!(
+                "el.value={v}; el.dispatchEvent(new Event('change',{{bubbles:true}})); return el.value", v=v
+            ))).await
+        }
+        Command::Focus { selector, timeout_ms } => {
+            eval_js(pending, queue, &query_js(&selector, timeout_ms,
+                "(function(){ el.focus(); return null; })()"
+            )).await
+        }
+        Command::Blur { selector, timeout_ms } => {
+            eval_js(pending, queue, &query_js(&selector, timeout_ms,
+                "(function(){ el.blur(); return null; })()"
+            )).await
+        }
+        Command::DragAndDrop { source, target, timeout_ms } => {
+            let src = json_str(&source);
+            let tgt = json_str(&target);
+            eval_js(pending, queue, &format!(
+                r#"(async function(){{
+                    var dl=Date.now()+{t};
+                    while(Date.now()<dl){{
+                        var s=document.querySelector({src}); var t=document.querySelector({tgt});
+                        if(s&&t){{
+                            s.scrollIntoView({{block:'center'}});
+                            var sr=s.getBoundingClientRect(); var tr=t.getBoundingClientRect();
+                            var sx=sr.left+sr.width/2,sy=sr.top+sr.height/2;
+                            var tx=tr.left+tr.width/2,ty=tr.top+tr.height/2;
+                            var dt=new DataTransfer();
+                            s.dispatchEvent(new DragEvent('dragstart',{{bubbles:true,clientX:sx,clientY:sy,dataTransfer:dt}}));
+                            s.dispatchEvent(new DragEvent('drag',{{bubbles:true,clientX:sx,clientY:sy,dataTransfer:dt}}));
+                            t.dispatchEvent(new DragEvent('dragenter',{{bubbles:true,clientX:tx,clientY:ty,dataTransfer:dt}}));
+                            t.dispatchEvent(new DragEvent('dragover',{{bubbles:true,clientX:tx,clientY:ty,dataTransfer:dt}}));
+                            t.dispatchEvent(new DragEvent('drop',{{bubbles:true,clientX:tx,clientY:ty,dataTransfer:dt}}));
+                            s.dispatchEvent(new DragEvent('dragend',{{bubbles:true,clientX:tx,clientY:ty,dataTransfer:dt}}));
+                            return null;
+                        }}
+                        await new Promise(function(r){{setTimeout(r,50)}});
+                    }}
+                    throw new Error('timeout waiting for drag source/target');
+                }})()"#, src=src, tgt=tgt, t=timeout_ms
+            )).await
+        }
+        Command::SetInputFiles { selector, files, timeout_ms } => {
+            let files_json: Vec<String> = files.iter().map(|f| {
+                format!(r#"{{"name":{},"mime":{},"b64":{}}}"#,
+                    json_str(&f.name), json_str(&f.mime_type), json_str(&f.base64))
+            }).collect();
+            let arr = format!("[{}]", files_json.join(","));
+            eval_js(pending, queue, &query_js(&selector, timeout_ms, &format!(
+                r#"(function(){{ var files={arr}; var dt=new DataTransfer(); for(var i=0;i<files.length;i++){{ var f=files[i]; var bin=atob(f.b64); var bytes=new Uint8Array(bin.length); for(var j=0;j<bin.length;j++) bytes[j]=bin.charCodeAt(j); dt.items.add(new File([bytes],f.name,{{type:f.mime}})); }} el.files=dt.files; el.dispatchEvent(new Event('change',{{bubbles:true}})); return el.files.length; }})()"#, arr=arr
+            ))).await
+        }
+
+        // ── Queries (auto-wait for element to exist) ──────────────────
+
+        Command::TextContent { selector, timeout_ms } => {
+            eval_js(pending, queue, &query_js(&selector, timeout_ms, "el.textContent")).await
+        }
+        Command::InnerHtml { selector, timeout_ms } => {
+            eval_js(pending, queue, &query_js(&selector, timeout_ms, "el.innerHTML")).await
+        }
+        Command::InnerText { selector, timeout_ms } => {
+            eval_js(pending, queue, &query_js(&selector, timeout_ms, "el.innerText")).await
+        }
+        Command::GetAttribute { selector, name, timeout_ms } => {
             let n = json_str(&name);
-            eval_js(pending, queue, &format!(
-                r#"(function(){{ var el=document.querySelector({s}); if(!el) throw new Error('not found: '+{s}); return el.getAttribute({n}); }})()"#, s=s, n=n
+            eval_js(pending, queue, &query_js(&selector, timeout_ms, &format!("el.getAttribute({n})", n=n))).await
+        }
+        Command::InputValue { selector, timeout_ms } => {
+            eval_js(pending, queue, &query_js(&selector, timeout_ms, "el.value||''")).await
+        }
+        Command::BoundingBox { selector, timeout_ms } => {
+            eval_js(pending, queue, &query_js(&selector, timeout_ms,
+                "(function(){ var r2=el.getBoundingClientRect(); return {x:r2.left,y:r2.top,width:r2.width,height:r2.height}; })()"
             )).await
         }
-        Command::InputValue { selector } => {
-            let s = json_str(&selector);
-            eval_js(pending, queue, &format!(
-                r#"(function(){{ var el=document.querySelector({s}); if(!el) throw new Error('not found: '+{s}); return el.value||''; }})()"#, s=s
-            )).await
-        }
+
+        // ── State checks (instant, no retry) ──────────────────────────
+
         Command::IsVisible { selector } => {
             let s = json_str(&selector);
             eval_js(pending, queue, &format!(
                 r#"(function(){{ var el=document.querySelector({s}); if(!el) return false; var r=el.getBoundingClientRect(); var st=getComputedStyle(el); return r.width>0&&r.height>0&&st.visibility!=='hidden'&&st.display!=='none'&&parseFloat(st.opacity)>0; }})()"#, s=s
             )).await
         }
-        Command::WaitForSelector { selector, timeout_ms } => {
+        Command::IsChecked { selector } => {
             let s = json_str(&selector);
             eval_js(pending, queue, &format!(
-                r#"(async function(){{ var dl=Date.now()+{t}; while(Date.now()<dl){{ var el=document.querySelector({s}); if(el){{ var r=el.getBoundingClientRect(); var st=getComputedStyle(el); if(r.width>0&&r.height>0&&st.visibility!=='hidden'&&st.display!=='none') return true; }} await new Promise(function(r){{setTimeout(r,50)}}); }} throw new Error('timeout waiting for '+{s}); }})()"#,
-                s=s, t=timeout_ms
+                r#"(function(){{ var el=document.querySelector({s}); if(!el) return false; return !!el.checked; }})()"#, s=s
             )).await
         }
-        Command::Count { selector } => {
-            let s = json_str(&selector);
-            eval_js(pending, queue, &format!(r#"document.querySelectorAll({s}).length"#, s=s)).await
-        }
-        Command::InnerHtml { selector } => {
+        Command::IsDisabled { selector } => {
             let s = json_str(&selector);
             eval_js(pending, queue, &format!(
-                r#"(function(){{ var el=document.querySelector({s}); if(!el) throw new Error('not found: '+{s}); return el.innerHTML; }})()"#, s=s
+                r#"(function(){{ var el=document.querySelector({s}); if(!el) return true; return el.disabled===true||el.hasAttribute('disabled'); }})()"#, s=s
             )).await
         }
-        Command::InnerText { selector } => {
+        Command::IsEditable { selector } => {
             let s = json_str(&selector);
             eval_js(pending, queue, &format!(
-                r#"(function(){{ var el=document.querySelector({s}); if(!el) throw new Error('not found: '+{s}); return el.innerText; }})()"#, s=s
+                r#"(function(){{ var el=document.querySelector({s}); if(!el) return false; if(el.disabled||el.readOnly) return false; var tag=el.tagName; return tag==='INPUT'||tag==='TEXTAREA'||tag==='SELECT'||el.isContentEditable; }})()"#, s=s
             )).await
         }
+
+        // ── Bulk queries (no retry, work on zero matches) ─────────────
+
         Command::AllTextContents { selector } => {
             let s = json_str(&selector);
             eval_js(pending, queue, &format!(
@@ -316,71 +415,18 @@ async fn execute_command(
                 r#"Array.from(document.querySelectorAll({s})).map(function(el){{ return el.innerText||''; }})"#, s=s
             )).await
         }
-        Command::IsChecked { selector } => {
+        Command::Count { selector } => {
             let s = json_str(&selector);
-            eval_js(pending, queue, &format!(
-                r#"(function(){{ var el=document.querySelector({s}); if(!el) throw new Error('not found: '+{s}); return !!el.checked; }})()"#, s=s
-            )).await
+            eval_js(pending, queue, &format!(r#"document.querySelectorAll({s}).length"#, s=s)).await
         }
-        Command::IsDisabled { selector } => {
+
+        // ── Waiting ───────────────────────────────────────────────────
+
+        Command::WaitForSelector { selector, timeout_ms } => {
             let s = json_str(&selector);
             eval_js(pending, queue, &format!(
-                r#"(function(){{ var el=document.querySelector({s}); if(!el) throw new Error('not found: '+{s}); return el.disabled===true||el.hasAttribute('disabled'); }})()"#, s=s
-            )).await
-        }
-        Command::IsEditable { selector } => {
-            let s = json_str(&selector);
-            eval_js(pending, queue, &format!(
-                r#"(function(){{ var el=document.querySelector({s}); if(!el) throw new Error('not found: '+{s}); if(el.disabled||el.readOnly) return false; var tag=el.tagName; return tag==='INPUT'||tag==='TEXTAREA'||tag==='SELECT'||el.isContentEditable; }})()"#, s=s
-            )).await
-        }
-        Command::BoundingBox { selector } => {
-            let s = json_str(&selector);
-            eval_js(pending, queue, &format!(
-                r#"(function(){{ var el=document.querySelector({s}); if(!el) return null; var r=el.getBoundingClientRect(); return {{x:r.left,y:r.top,width:r.width,height:r.height}}; }})()"#, s=s
-            )).await
-        }
-        Command::Hover { selector } => {
-            let s = json_str(&selector);
-            eval_js(pending, queue, &format!(
-                r#"(function(){{ var el=document.querySelector({s}); if(!el) throw new Error('not found: '+{s}); el.scrollIntoView({{block:'center'}}); var r=el.getBoundingClientRect(); var cx=r.left+r.width/2; var cy=r.top+r.height/2; el.dispatchEvent(new MouseEvent('mouseenter',{{bubbles:true,clientX:cx,clientY:cy}})); el.dispatchEvent(new MouseEvent('mouseover',{{bubbles:true,clientX:cx,clientY:cy}})); return null; }})()"#, s=s
-            )).await
-        }
-        Command::Dblclick { selector } => {
-            let s = json_str(&selector);
-            eval_js(pending, queue, &format!(
-                r#"(function(){{ var el=document.querySelector({s}); if(!el) throw new Error('not found: '+{s}); el.scrollIntoView({{block:'center'}}); el.dispatchEvent(new MouseEvent('dblclick',{{bubbles:true}})); return null; }})()"#, s=s
-            )).await
-        }
-        Command::Check { selector } => {
-            let s = json_str(&selector);
-            eval_js(pending, queue, &format!(
-                r#"(function(){{ var el=document.querySelector({s}); if(!el) throw new Error('not found: '+{s}); if(!el.checked){{ el.click(); }} return null; }})()"#, s=s
-            )).await
-        }
-        Command::Uncheck { selector } => {
-            let s = json_str(&selector);
-            eval_js(pending, queue, &format!(
-                r#"(function(){{ var el=document.querySelector({s}); if(!el) throw new Error('not found: '+{s}); if(el.checked){{ el.click(); }} return null; }})()"#, s=s
-            )).await
-        }
-        Command::SelectOption { selector, value } => {
-            let s = json_str(&selector);
-            let v = json_str(&value);
-            eval_js(pending, queue, &format!(
-                r#"(function(){{ var el=document.querySelector({s}); if(!el) throw new Error('not found: '+{s}); el.value={v}; el.dispatchEvent(new Event('change',{{bubbles:true}})); return el.value; }})()"#, s=s, v=v
-            )).await
-        }
-        Command::Focus { selector } => {
-            let s = json_str(&selector);
-            eval_js(pending, queue, &format!(
-                r#"(function(){{ var el=document.querySelector({s}); if(!el) throw new Error('not found: '+{s}); el.focus(); return null; }})()"#, s=s
-            )).await
-        }
-        Command::Blur { selector } => {
-            let s = json_str(&selector);
-            eval_js(pending, queue, &format!(
-                r#"(function(){{ var el=document.querySelector({s}); if(!el) throw new Error('not found: '+{s}); el.blur(); return null; }})()"#, s=s
+                r#"(async function(){{ var dl=Date.now()+{t}; while(Date.now()<dl){{ var el=document.querySelector({s}); if(el){{ var r=el.getBoundingClientRect(); var st=getComputedStyle(el); if(r.width>0&&r.height>0&&st.visibility!=='hidden'&&st.display!=='none') return true; }} await new Promise(function(r){{setTimeout(r,50)}}); }} throw new Error('timeout waiting for '+{s}); }})()"#,
+                s=s, t=timeout_ms
             )).await
         }
         Command::WaitForFunction { expression, timeout_ms } => {
@@ -392,53 +438,6 @@ async fn execute_command(
         }
         Command::Content => {
             eval_js(pending, queue, "document.documentElement.outerHTML").await
-        }
-        Command::DragAndDrop { source, target } => {
-            let src = json_str(&source);
-            let tgt = json_str(&target);
-            eval_js(pending, queue, &format!(
-                r#"(function(){{
-                    var s=document.querySelector({src}); if(!s) throw new Error('source not found: '+{src});
-                    var t=document.querySelector({tgt}); if(!t) throw new Error('target not found: '+{tgt});
-                    s.scrollIntoView({{block:'center'}});
-                    var sr=s.getBoundingClientRect(); var tr=t.getBoundingClientRect();
-                    var sx=sr.left+sr.width/2, sy=sr.top+sr.height/2;
-                    var tx=tr.left+tr.width/2, ty=tr.top+tr.height/2;
-                    var dt=new DataTransfer();
-                    s.dispatchEvent(new DragEvent('dragstart',{{bubbles:true,clientX:sx,clientY:sy,dataTransfer:dt}}));
-                    s.dispatchEvent(new DragEvent('drag',{{bubbles:true,clientX:sx,clientY:sy,dataTransfer:dt}}));
-                    t.dispatchEvent(new DragEvent('dragenter',{{bubbles:true,clientX:tx,clientY:ty,dataTransfer:dt}}));
-                    t.dispatchEvent(new DragEvent('dragover',{{bubbles:true,clientX:tx,clientY:ty,dataTransfer:dt}}));
-                    t.dispatchEvent(new DragEvent('drop',{{bubbles:true,clientX:tx,clientY:ty,dataTransfer:dt}}));
-                    s.dispatchEvent(new DragEvent('dragend',{{bubbles:true,clientX:tx,clientY:ty,dataTransfer:dt}}));
-                    return null;
-                }})()"#, src=src, tgt=tgt
-            )).await
-        }
-        Command::SetInputFiles { selector, files } => {
-            let s = json_str(&selector);
-            let files_json: Vec<String> = files.iter().map(|f| {
-                format!(r#"{{"name":{},"mime":{},"b64":{}}}"#,
-                    json_str(&f.name), json_str(&f.mime_type), json_str(&f.base64))
-            }).collect();
-            let arr = format!("[{}]", files_json.join(","));
-            eval_js(pending, queue, &format!(
-                r#"(function(){{
-                    var el=document.querySelector({s}); if(!el) throw new Error('not found: '+{s});
-                    var files={arr};
-                    var dt=new DataTransfer();
-                    for(var i=0;i<files.length;i++){{
-                        var f=files[i];
-                        var bin=atob(f.b64);
-                        var bytes=new Uint8Array(bin.length);
-                        for(var j=0;j<bin.length;j++) bytes[j]=bin.charCodeAt(j);
-                        dt.items.add(new File([bytes],f.name,{{type:f.mime}}));
-                    }}
-                    el.files=dt.files;
-                    el.dispatchEvent(new Event('change',{{bubbles:true}}));
-                    return el.files.length;
-                }})()"#, s=s, arr=arr
-            )).await
         }
         Command::InstallDialogHandler { default_confirm, default_prompt_text } => {
             let confirm_val = if default_confirm { "true" } else { "false" };

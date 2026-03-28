@@ -11,155 +11,178 @@ pub enum Command {
     /// Execute arbitrary JavaScript and return the result
     Eval { script: String },
 
-    /// Click an element by CSS selector
+    // ── Actions (auto-wait for visible + enabled) ─────────────────────
+
     Click {
         selector: String,
+        #[serde(default = "default_timeout")]
+        timeout_ms: u64,
     },
 
-    /// Fill an input element with text (clears first)
+    Dblclick {
+        selector: String,
+        #[serde(default = "default_timeout")]
+        timeout_ms: u64,
+    },
+
+    Hover {
+        selector: String,
+        #[serde(default = "default_timeout")]
+        timeout_ms: u64,
+    },
+
     Fill {
         selector: String,
         text: String,
+        #[serde(default = "default_timeout")]
+        timeout_ms: u64,
     },
 
-    /// Type text character by character (does not clear)
     TypeText {
         selector: String,
         text: String,
+        #[serde(default = "default_timeout")]
+        timeout_ms: u64,
     },
 
-    /// Press a key on an element
     Press {
         selector: String,
         key: String,
+        #[serde(default = "default_timeout")]
+        timeout_ms: u64,
     },
 
-    /// Get text content of an element
+    Check {
+        selector: String,
+        #[serde(default = "default_timeout")]
+        timeout_ms: u64,
+    },
+
+    Uncheck {
+        selector: String,
+        #[serde(default = "default_timeout")]
+        timeout_ms: u64,
+    },
+
+    SelectOption {
+        selector: String,
+        value: String,
+        #[serde(default = "default_timeout")]
+        timeout_ms: u64,
+    },
+
+    Focus {
+        selector: String,
+        #[serde(default = "default_timeout")]
+        timeout_ms: u64,
+    },
+
+    Blur {
+        selector: String,
+        #[serde(default = "default_timeout")]
+        timeout_ms: u64,
+    },
+
+    DragAndDrop {
+        source: String,
+        target: String,
+        #[serde(default = "default_timeout")]
+        timeout_ms: u64,
+    },
+
+    SetInputFiles {
+        selector: String,
+        files: Vec<FilePayload>,
+        #[serde(default = "default_timeout")]
+        timeout_ms: u64,
+    },
+
+    // ── Queries (auto-wait for element to exist) ──────────────────────
+
     TextContent {
         selector: String,
+        #[serde(default = "default_timeout")]
+        timeout_ms: u64,
     },
 
-    /// Get an attribute value from an element
+    InnerHtml {
+        selector: String,
+        #[serde(default = "default_timeout")]
+        timeout_ms: u64,
+    },
+
+    InnerText {
+        selector: String,
+        #[serde(default = "default_timeout")]
+        timeout_ms: u64,
+    },
+
     GetAttribute {
         selector: String,
         name: String,
+        #[serde(default = "default_timeout")]
+        timeout_ms: u64,
     },
 
-    /// Get the input value of a form element
     InputValue {
         selector: String,
+        #[serde(default = "default_timeout")]
+        timeout_ms: u64,
     },
 
-    /// Check if an element is visible
-    IsVisible {
+    BoundingBox {
         selector: String,
+        #[serde(default = "default_timeout")]
+        timeout_ms: u64,
     },
 
-    /// Wait for a selector to appear in the DOM
+    // ── State checks (instant, no retry) ──────────────────────────────
+
+    IsVisible { selector: String },
+    IsChecked { selector: String },
+    IsDisabled { selector: String },
+    IsEditable { selector: String },
+
+    // ── Bulk queries (no retry, work on zero matches) ─────────────────
+
+    AllTextContents { selector: String },
+    AllInnerTexts { selector: String },
+    Count { selector: String },
+
+    // ── Waiting ───────────────────────────────────────────────────────
+
     WaitForSelector {
         selector: String,
         #[serde(default = "default_timeout")]
         timeout_ms: u64,
     },
 
-    /// Count elements matching a selector
-    Count {
-        selector: String,
-    },
-
-    /// Get the page title
-    Title,
-
-    /// Get the current URL
-    Url,
-
-    /// Navigate to a URL
-    Goto {
-        url: String,
-    },
-
-    /// Get innerHTML of an element
-    InnerHtml { selector: String },
-
-    /// Get innerText of an element (visible text only)
-    InnerText { selector: String },
-
-    /// Get textContent of all matching elements
-    AllTextContents { selector: String },
-
-    /// Get innerText of all matching elements
-    AllInnerTexts { selector: String },
-
-    /// Check if an element is checked (checkbox/radio)
-    IsChecked { selector: String },
-
-    /// Check if an element is disabled
-    IsDisabled { selector: String },
-
-    /// Check if an element is editable
-    IsEditable { selector: String },
-
-    /// Get the bounding box of an element
-    BoundingBox { selector: String },
-
-    /// Hover over an element
-    Hover { selector: String },
-
-    /// Double-click an element
-    Dblclick { selector: String },
-
-    /// Check a checkbox or radio
-    Check { selector: String },
-
-    /// Uncheck a checkbox
-    Uncheck { selector: String },
-
-    /// Select an option from a <select> element
-    SelectOption { selector: String, value: String },
-
-    /// Focus an element
-    Focus { selector: String },
-
-    /// Blur (unfocus) an element
-    Blur { selector: String },
-
-    /// Wait for a JS expression to return truthy
     WaitForFunction {
         expression: String,
         #[serde(default = "default_timeout")]
         timeout_ms: u64,
     },
 
-    /// Get the full page HTML
+    // ── Page info (no selector) ───────────────────────────────────────
+
+    Title,
+    Url,
     Content,
+    Goto { url: String },
 
-    /// Drag one element onto another
-    DragAndDrop {
-        source: String,
-        target: String,
-    },
+    // ── Dialogs ───────────────────────────────────────────────────────
 
-    /// Set files on a file input element (base64-encoded file contents)
-    SetInputFiles {
-        selector: String,
-        files: Vec<FilePayload>,
-    },
-
-    /// Install dialog handlers (alert/confirm/prompt interception)
     InstallDialogHandler {
         #[serde(default)]
         default_confirm: bool,
         #[serde(default)]
         default_prompt_text: Option<String>,
     },
-
-    /// Get captured dialogs since last check
     GetDialogs,
-
-    /// Clear captured dialogs
     ClearDialogs,
 
-    /// Add a network route (intercept fetch/XHR matching a URL pattern)
+    // ── Network mocking ───────────────────────────────────────────────
+
     AddNetworkRoute {
         pattern: String,
         status: u16,
@@ -167,47 +190,31 @@ pub enum Command {
         #[serde(default)]
         content_type: Option<String>,
     },
-
-    /// Remove a network route
-    RemoveNetworkRoute {
-        pattern: String,
-    },
-
-    /// Clear all network routes
+    RemoveNetworkRoute { pattern: String },
     ClearNetworkRoutes,
-
-    /// Get captured network requests
     GetNetworkRequests,
-
-    /// Clear captured network requests
     ClearNetworkRequests,
 
-    /// Take a screenshot of the webview (returned as base64 PNG)
+    // ── Capture ───────────────────────────────────────────────────────
+
     Screenshot {
-        /// Optional: save to this file path instead of returning base64
         #[serde(default)]
         path: Option<String>,
     },
-
-    /// Native screenshot via platform APIs (CoreGraphics on macOS).
-    /// Captures the actual window pixels including native chrome.
     NativeScreenshot {
-        /// Optional: save to this file path instead of returning base64
         #[serde(default)]
         path: Option<String>,
     },
-
-    /// Start recording the window as a video (native frame capture).
     StartRecording {
-        /// Directory to store frames (created if needed).
         path: String,
-        /// Frames per second (default: 10).
         #[serde(default = "default_fps")]
         fps: u32,
     },
-
-    /// Stop recording and optionally stitch into a video file.
     StopRecording,
+}
+
+fn default_timeout() -> u64 {
+    5000
 }
 
 fn default_fps() -> u32 {
@@ -249,8 +256,4 @@ impl Response {
             error: Some(msg.into()),
         }
     }
-}
-
-fn default_timeout() -> u64 {
-    5000
 }
