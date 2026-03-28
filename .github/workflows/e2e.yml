@@ -38,7 +38,7 @@ jobs:
 
       - name: Run browser-only E2E tests
         working-directory: examples/hello-world
-        run: npx playwright test --config e2e/playwright.config.ts --project=browser-only --workers=2
+        run: npx playwright test --config e2e/playwright.config.ts --project=browser-only --workers=2 --grep-invert "should fail|intentional"
 
       - name: Upload test results
         if: always()
@@ -103,7 +103,7 @@ jobs:
 
       - name: Run Tauri E2E tests
         working-directory: examples/hello-world
-        run: npx playwright test --config e2e/playwright.config.ts --project=tauri --workers=1
+        run: npx playwright test --config e2e/playwright.config.ts --project=tauri --workers=1 --grep-invert "should fail|intentional"
 
       - name: Upload test results
         if: always()

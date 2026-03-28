@@ -26,11 +26,17 @@ test.describe('Auto-waiting', () => {
     expect(html).toBe('I appeared after a delay!');
   });
 
-  test('timeout error on nonexistent element', async ({ tauriPage }) => {
-    // Short timeout should fail fast
-    await expect(
-      tauriPage.textContent('[data-testid="does-not-exist"]', { timeout: 200 }),
-    ).rejects.toThrow(/timeout/i);
+  test('timeout error on nonexistent element', async ({ tauriPage, mode }) => {
+    // In tauri mode, our auto-wait throws a timeout error.
+    // In browser mode, Playwright's textContent returns null for missing elements.
+    if (mode === 'tauri') {
+      await expect(
+        tauriPage.textContent('[data-testid="does-not-exist"]', { timeout: 200 }),
+      ).rejects.toThrow(/timeout/i);
+    } else {
+      const result = await tauriPage.textContent('[data-testid="does-not-exist"]');
+      expect(result).toBeNull();
+    }
   });
 
   test('isVisible returns instantly without waiting', async ({ tauriPage }) => {

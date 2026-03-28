@@ -4,7 +4,7 @@ export default defineConfig({
   testDir: './tests',
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
-  retries: process.env.CI ? 2 : 0,
+  retries: 0,
   workers: process.env.CI ? 1 : undefined,
   reporter: [['html', { open: 'never' }]],
   timeout: 30000,
@@ -38,7 +38,7 @@ export default defineConfig({
   webServer: {
     command: 'pnpm dev',
     port: 1420,
-    reuseExistingServer: !process.env.CI,
+    reuseExistingServer: true,
     cwd: '..',
   },
 });
