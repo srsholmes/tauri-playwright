@@ -22,9 +22,9 @@ export function createTauriTest(config: TauriTestConfig) {
       if (mode === 'browser') {
         // Browser-only mode: mock Tauri IPC and run in Chromium
         if (config.ipcMocks) {
-          await page.addInitScript(generateIpcMockScript(config.ipcMocks));
+          await page.addInitScript(generateIpcMockScript(config.ipcMocks, config.ipcContext));
         } else {
-          await page.addInitScript(generateIpcMockScript({}));
+          await page.addInitScript(generateIpcMockScript({}, config.ipcContext));
         }
 
         await page.goto(config.devUrl);

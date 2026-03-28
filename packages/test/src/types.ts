@@ -19,6 +19,25 @@ export interface TauriTestConfig {
   ipcMocks?: Record<string, (args?: Record<string, unknown>) => unknown>;
 
   /**
+   * Variables to inject into the browser context so mock handlers can
+   * reference them by name. Each key becomes a `var` declaration in the
+   * generated script, with the value JSON-serialized.
+   *
+   * @example
+   * ```ts
+   * const USERS = [{ id: 1, name: 'Alice' }];
+   * createTauriTest({
+   *   ipcContext: { USERS },
+   *   ipcMocks: {
+   *     get_users: () => USERS,
+   *     get_user: (args) => USERS.find(u => u.id === args.id),
+   *   },
+   * });
+   * ```
+   */
+  ipcContext?: Record<string, unknown>;
+
+  /**
    * Command to start the Tauri app for full E2E mode.
    * If not set, assumes the app is already running.
    * @example 'npx tauri dev'

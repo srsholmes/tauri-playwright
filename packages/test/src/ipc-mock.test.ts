@@ -69,4 +69,40 @@ describe('generateIpcMockScript', () => {
     expect(script).toContain('"search"');
     expect(script).toContain('"save"');
   });
+
+  it('injects context variables as var declarations', () => {
+    const USERS = [{ id: 1, name: 'Alice' }];
+    const script = generateIpcMockScript(
+      { get_users: () => USERS },
+      { USERS },
+    );
+    expect(script).toContain('var USERS = [{"id":1,"name":"Alice"}]');
+  });
+
+  it('context variables appear before mockHandlers', () => {
+    const script = generateIpcMockScript(
+      { get_items: () => ITEMS },
+      { ITEMS: ['a', 'b'] },
+    );
+    const contextPos = script.indexOf('var ITEMS =');
+    const handlersPos = script.indexOf('var mockHandlers =');
+    expect(contextPos).toBeGreaterThan(-1);
+    expect(handlersPos).toBeGreaterThan(contextPos);
+  });
+
+  it('works without context', () => {
+    const script = generateIpcMockScript({ ping: () => 'pong' });
+    expect(script).toContain('"ping"');
+    expect(script).not.toContain('undefined');
+  });
+
+  it('handles multiple context variables', () => {
+    const script = generateIpcMockScript(
+      {},
+      { FOO: 'bar', COUNT: 42, DATA: { nested: true } },
+    );
+    expect(script).toContain('var FOO = "bar"');
+    expect(script).toContain('var COUNT = 42');
+    expect(script).toContain('var DATA = {"nested":true}');
+  });
 });

@@ -25,7 +25,15 @@
  */
 export function generateIpcMockScript(
   mocks: Record<string, (args?: Record<string, unknown>) => unknown>,
+  context?: Record<string, unknown>,
 ): string {
+  // Serialize context variables so mock handlers can reference Node.js values
+  const contextDeclarations = context
+    ? Object.entries(context)
+        .map(([name, value]) => `  var ${name} = ${JSON.stringify(value)};`)
+        .join('\n')
+    : '';
+
   // Serialize handlers as functions that run at invoke time (dynamic mocks)
   const mockEntries = Object.entries(mocks).map(([cmd, handler]) => {
     return `    ${JSON.stringify(cmd)}: ${handler.toString()}`;
@@ -34,6 +42,8 @@ export function generateIpcMockScript(
   return `
 (function() {
   "use strict";
+
+${contextDeclarations}
 
   var mockHandlers = {
 ${mockEntries.join(',\n')}

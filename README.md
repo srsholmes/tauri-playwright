@@ -396,7 +396,33 @@ createTauriTest({
 });
 ```
 
-Assert which IPC commands were called:
+#### Using Node.js variables in mocks (`ipcContext`)
+
+Mock handlers are serialized and run inside the browser, so they can't access
+Node.js variables by default. Use `ipcContext` to inject variables into the
+browser scope — each key becomes a `var` declaration available to your handlers:
+
+```ts
+const MOCK_USERS = [
+  { id: 1, name: 'Alice' },
+  { id: 2, name: 'Bob' },
+];
+
+createTauriTest({
+  devUrl: 'http://localhost:1420',
+  ipcContext: { MOCK_USERS },
+  ipcMocks: {
+    get_users: () => MOCK_USERS,
+    get_user: (args) => MOCK_USERS.find(u => u.id === args.id) ?? null,
+  },
+});
+```
+
+Without `ipcContext`, referencing `MOCK_USERS` inside a mock handler would
+throw a `ReferenceError` in the browser. The context values are
+JSON-serialized, so they must be plain data (no functions or class instances).
+
+#### Asserting IPC calls
 
 ```ts
 import { getCapturedInvokes, clearCapturedInvokes } from '@srsholmes/tauri-playwright';
