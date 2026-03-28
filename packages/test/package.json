@@ -18,6 +18,8 @@
   "scripts": {
     "build": "tsup src/index.ts --format esm --dts --outDir dist",
     "dev": "tsup src/index.ts --format esm --dts --outDir dist --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf dist"
   },
@@ -28,7 +30,8 @@
     "@playwright/test": "^1.52.0",
     "@types/node": "^25.5.0",
     "tsup": "^8.3.5",
-    "typescript": "^5.7.2"
+    "typescript": "^5.7.2",
+    "vitest": "^4.1.2"
   },
   "keywords": [
     "tauri",
