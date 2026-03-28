@@ -1,0 +1,136 @@
+name: E2E Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  unit-tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install
+      - run: pnpm --filter @srsholmes/tauri-playwright build
+      - run: pnpm --filter @srsholmes/tauri-playwright test
+
+  browser-tests:
+    name: Browser-Only E2E (Headless)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install
+      - run: pnpm --filter @srsholmes/tauri-playwright build
+      - run: npx playwright install chromium --with-deps
+        working-directory: examples/hello-world
+
+      - name: Run browser-only E2E tests
+        working-directory: examples/hello-world
+        run: npx playwright test --config e2e/playwright.config.ts --project=browser-only --workers=2
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-test-results
+          path: examples/hello-world/test-results/
+          retention-days: 7
+
+      - name: Upload HTML report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-playwright-report
+          path: examples/hello-world/playwright-report/
+          retention-days: 7
+
+  tauri-tests:
+    name: Tauri E2E (macOS)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@stable
+
+      - run: pnpm install
+      - run: pnpm --filter @srsholmes/tauri-playwright build
+
+      # Build the example Tauri app with the e2e-testing plugin
+      - name: Build Tauri app (debug, e2e feature)
+        working-directory: examples/hello-world
+        run: cargo build --manifest-path src-tauri/Cargo.toml --features e2e-testing
+
+      # Start Tauri app in background, wait for socket
+      - name: Start Tauri app
+        working-directory: examples/hello-world
+        run: |
+          # Start the Vite dev server
+          pnpm dev &
+          sleep 3
+
+          # Start the Tauri app (debug binary with e2e plugin)
+          ./src-tauri/target/debug/hello-world &
+
+          # Wait for the socket to appear
+          for i in $(seq 1 60); do
+            if [ -S /tmp/tauri-playwright.sock ]; then
+              echo "Socket ready after ${i}s"
+              break
+            fi
+            sleep 1
+          done
+
+          if [ ! -S /tmp/tauri-playwright.sock ]; then
+            echo "Socket not found after 60s"
+            exit 1
+          fi
+
+      - name: Run Tauri E2E tests
+        working-directory: examples/hello-world
+        run: npx playwright test --config e2e/playwright.config.ts --project=tauri --workers=1
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tauri-test-results
+          path: examples/hello-world/test-results/
+          retention-days: 7
+
+      - name: Upload HTML report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tauri-playwright-report
+          path: examples/hello-world/playwright-report/
+          retention-days: 7
+
+      - name: Upload videos
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tauri-test-videos
+          path: examples/hello-world/test-results/**/recording/
+          retention-days: 7
