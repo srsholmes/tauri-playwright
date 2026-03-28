@@ -1,4 +1,5 @@
 import { test as base, type Page, type TestInfo } from '@playwright/test';
+import { tauriExpect } from './expect.js';
 import { generateIpcMockScript } from './ipc-mock.js';
 import { PluginClient } from './socket-client.js';
 import { TauriPage } from './tauri-page.js';
@@ -143,7 +144,7 @@ export function createTauriTest(config: TauriTestConfig) {
 
   return {
     test: tauriTest,
-    expect: base.expect,
+    expect: tauriExpect,
   };
 }
 

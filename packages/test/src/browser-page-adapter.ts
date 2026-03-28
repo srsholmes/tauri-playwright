@@ -270,6 +270,44 @@ export class BrowserPageAdapter {
     this.capturedRequests = [];
   }
 
+  // ── Semantic selectors ───────────────────────────────────────────────
+  getByTestId(testId: string) {
+    return this.page.getByTestId(testId);
+  }
+
+  getByPlaceholder(text: string, options?: { exact?: boolean }) {
+    return this.page.getByPlaceholder(text, options);
+  }
+
+  getByAltText(text: string, options?: { exact?: boolean }) {
+    return this.page.getByAltText(text, options);
+  }
+
+  getByTitle(text: string, options?: { exact?: boolean }) {
+    return this.page.getByTitle(text, options);
+  }
+
+  getByRole(role: Parameters<Page['getByRole']>[0], options?: Parameters<Page['getByRole']>[1]) {
+    return this.page.getByRole(role, options);
+  }
+
+  getByText(text: string, options?: { exact?: boolean }) {
+    return this.page.getByText(text, options);
+  }
+
+  getByLabel(text: string, options?: { exact?: boolean }) {
+    return this.page.getByLabel(text, options);
+  }
+
+  // ── Keyboard & Mouse ────────────────────────────────────────────────
+  get keyboard() {
+    return this.page.keyboard;
+  }
+
+  get mouse() {
+    return this.page.mouse;
+  }
+
   // ── Capture ─────────────────────────────────────────────────────────
   async screenshot(options?: { path?: string }): Promise<Buffer> {
     return this.page.screenshot({ path: options?.path }) as Promise<Buffer>;
