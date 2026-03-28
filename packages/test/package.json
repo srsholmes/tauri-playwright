@@ -1,6 +1,6 @@
 {
   "name": "@srsholmes/tauri-playwright",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Playwright E2E testing for Tauri desktop apps",
   "type": "module",
   "main": "./dist/index.js",
