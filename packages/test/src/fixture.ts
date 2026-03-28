@@ -97,9 +97,11 @@ export function createTauriTest(config: TauriTestConfig) {
           // Reset app state by reloading the page before each test
           if (config.devUrl) {
             await tauriPage.evaluate(`window.location.href = ${JSON.stringify(config.devUrl)}`);
-            // Wait for the page to load
-            await new Promise((r) => setTimeout(r, 300));
-            await tauriPage.waitForFunction('document.readyState === "complete"');
+            // Wait for the page to reload and the polling bridge to reconnect
+            await new Promise((r) => setTimeout(r, 500));
+            await tauriPage.waitForFunction(
+              'document.readyState === "complete" && !!window.__PW_ACTIVE__',
+            );
           }
 
           // Start recording before the test runs

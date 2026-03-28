@@ -29,9 +29,15 @@ test.describe('Modal', () => {
     await tauriPage.click('[data-testid="btn-open-modal"]');
     await tauriPage.waitForSelector('[data-testid="modal-backdrop"]');
 
-    // Click the backdrop edge (not center, which would hit the modal content)
-    await tauriPage.evaluate('document.querySelector(\'[data-testid="modal-backdrop"]\').click()');
-    await tauriPage.waitForFunction('!document.querySelector(\'[data-testid="modal-backdrop"]\')');
+    // Click the backdrop directly via JS (clicking center would hit the modal content)
+    await tauriPage.evaluate(
+      'document.querySelector(\'[data-testid="modal-backdrop"]\')?.click()',
+    );
+
+    // Wait for React to remove the backdrop
+    await tauriPage.waitForFunction(
+      '!document.querySelector(\'[data-testid="modal-backdrop"]\')',
+    );
     expect(await tauriPage.isHidden('[data-testid="modal-backdrop"]')).toBe(true);
   });
 });
