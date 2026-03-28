@@ -70,6 +70,8 @@ jobs:
 
       - run: pnpm install
       - run: pnpm --filter @srsholmes/tauri-playwright build
+      - run: npx playwright install chromium --with-deps
+        working-directory: examples/hello-world
 
       # Build the example Tauri app with the e2e-testing plugin
       - name: Build Tauri app (debug, e2e feature)

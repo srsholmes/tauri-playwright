@@ -26,7 +26,7 @@ test.describe('Auto-waiting', () => {
     expect(html).toBe('I appeared after a delay!');
   });
 
-  test('timeout error on nonexistent element', async ({ tauriPage, mode }) => {
+  test('should fail - timeout on nonexistent element (tauri mode)', async ({ tauriPage, mode }) => {
     // In tauri mode, our auto-wait throws a timeout error.
     // In browser mode, Playwright's textContent returns null for missing elements.
     if (mode === 'tauri') {
