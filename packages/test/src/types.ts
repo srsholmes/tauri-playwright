@@ -36,14 +36,22 @@ export interface TauriTestConfig {
 
   /** Startup timeout in seconds. Default: 120 */
   startTimeout?: number;
+
+  /**
+   * CDP endpoint for connecting to WebView2 on Windows.
+   * When mode is 'cdp', Playwright connects directly via Chrome DevTools Protocol.
+   * @example 'http://localhost:9222'
+   */
+  cdpEndpoint?: string;
 }
 
 /**
  * Test mode selector.
- * - 'browser': Runs against dev server with mocked Tauri IPC
- * - 'tauri': Runs against real Tauri app via plugin socket bridge
+ * - 'browser': Runs against dev server with mocked Tauri IPC (headless, fast)
+ * - 'tauri': Runs against real Tauri app via plugin socket bridge (all platforms)
+ * - 'cdp': Connects to WebView2 via Chrome DevTools Protocol (Windows only, full Playwright)
  */
-export type TestMode = 'browser' | 'tauri';
+export type TestMode = 'browser' | 'tauri' | 'cdp';
 
 /**
  * Extended Playwright fixtures provided by tauri-playwright.

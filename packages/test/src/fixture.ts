@@ -1,4 +1,4 @@
-import { test as base, type Page, type TestInfo } from '@playwright/test';
+import { test as base, chromium, type Page, type TestInfo } from '@playwright/test';
 import { tauriExpect } from './expect.js';
 import { generateIpcMockScript } from './ipc-mock.js';
 import { PluginClient } from './socket-client.js';
@@ -10,11 +10,9 @@ import type { TauriTestConfig, TestMode, TauriFixtures, CapturedInvoke } from '.
 /**
  * Creates a Playwright test instance with Tauri-specific fixtures.
  *
- * **Browser mode** (default): `tauriPage` is a standard Playwright Page with
- * Tauri IPC mocked. Fast, no Rust needed.
- *
- * **Tauri mode**: `tauriPage` is a TauriPage backed by the plugin socket bridge.
- * Controls the real Tauri webview (WKWebView/WebView2/WebKitGTK).
+ * **Browser mode** (default): Headless Chromium with mocked Tauri IPC. Fast, no Rust needed.
+ * **Tauri mode**: Socket bridge to the real Tauri webview. Works on all platforms.
+ * **CDP mode**: Direct Chrome DevTools Protocol to WebView2. Windows only, full Playwright.
  */
 export function createTauriTest(config: TauriTestConfig) {
   const tauriTest = base.extend<TauriFixtures>({
@@ -34,6 +32,27 @@ export function createTauriTest(config: TauriTestConfig) {
         await page.waitForLoadState('networkidle');
         const adapter = new BrowserPageAdapter(page);
         await use(adapter as unknown as TauriFixtures['tauriPage']);
+      } else if (mode === 'cdp') {
+        // CDP mode: connect directly to WebView2 via Chrome DevTools Protocol.
+        // Windows only — WebView2 is Chromium-based and supports --remote-debugging-port.
+        // Launch Tauri app with: WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS="--remote-debugging-port=9222"
+        const endpoint = config.cdpEndpoint ?? 'http://localhost:9222';
+        let browser;
+        try {
+          browser = await chromium.connectOverCDP(endpoint);
+          const context = browser.contexts()[0];
+          if (!context) throw new Error('No browser context found — is the Tauri app running with CDP enabled?');
+          const cdpPage = context.pages()[0] ?? await context.newPage();
+
+          // Wait for the app to be ready
+          await cdpPage.waitForLoadState('domcontentloaded');
+
+          const adapter = new BrowserPageAdapter(cdpPage);
+          await use(adapter as unknown as TauriFixtures['tauriPage']);
+        } finally {
+          // Don't close the browser — we connected to an existing one
+          browser?.close().catch(() => {});
+        }
       } else {
         // Tauri mode: connect to the real Tauri app via the plugin socket
         let processManager: TauriProcessManager | null = null;
