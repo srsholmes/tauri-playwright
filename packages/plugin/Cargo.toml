@@ -1,6 +1,6 @@
 [package]
 name = "tauri-plugin-playwright"
-version = "0.2.1"
+version = "0.2.2"
 edition = "2021"
 description = "Tauri plugin that enables Playwright E2E testing by embedding a control server in the app"
 license = "MIT"
