@@ -1,5 +1,36 @@
 use serde::{Deserialize, Serialize};
 
+use crate::server::PendingResults;
+
+#[tauri::command]
+pub async fn pw_result(
+    pending: tauri::State<'_, PendingResults>,
+    id: String,
+    ok: bool,
+    data: Option<String>,
+    error: Option<String>,
+) -> Result<(), String> {
+    let mut map = pending.lock().await;
+    if let Some(tx) = map.remove(&id) {
+        let result = if ok {
+            format!(
+                r#"{{"ok":true,"v":{}}}"#,
+                data.unwrap_or_else(|| "null".to_string())
+            )
+        } else {
+            format!(
+                r#"{{"ok":false,"e":"{}"}}"#,
+                error
+                    .unwrap_or_else(|| "unknown".to_string())
+                    .replace('\\', r"\\")
+                    .replace('"', r#"\""#)
+            )
+        };
+        let _ = tx.send(result);
+    }
+    Ok(())
+}
+
 /// A command sent from the Playwright test runner to the plugin.
 /// Protocol: newline-delimited JSON over Unix socket or TCP.
 #[derive(Debug, Deserialize)]
