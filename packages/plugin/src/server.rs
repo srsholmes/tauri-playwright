@@ -346,8 +346,8 @@ async fn execute_command<R: Runtime>(
         Command::WaitForFunction { expression, timeout_ms } => {
             let e = json_str(&expression);
             eval_js(app, pending, window_label, &format!(
-                r#"(async function(){{ var dl=Date.now()+{t}; while(Date.now()<dl){{ try{{ var r=eval({e}); if(r) return r; }}catch(ex){{}} await new Promise(function(r){{setTimeout(r,100)}}); }} throw new Error('waitForFunction timeout: '+{e}); }})()"#,
-                e=e, t=timeout_ms
+                r#"(async function(){{ var dl=Date.now()+{t}; while(Date.now()<dl){{ try{{ var r=({expr}); if(r) return r; }}catch(ex){{}} await new Promise(function(r){{setTimeout(r,100)}}); }} throw new Error('waitForFunction timeout: '+{e}); }})()"#,
+                expr=expression, e=e, t=timeout_ms
             )).await
         }
         Command::Content => {

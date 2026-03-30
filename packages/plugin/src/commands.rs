@@ -18,13 +18,9 @@ pub async fn pw_result(
                 data.unwrap_or_else(|| "null".to_string())
             )
         } else {
-            format!(
-                r#"{{"ok":false,"e":"{}"}}"#,
-                error
-                    .unwrap_or_else(|| "unknown".to_string())
-                    .replace('\\', r"\\")
-                    .replace('"', r#"\""#)
-            )
+            let err_str = error.unwrap_or_else(|| "unknown".to_string());
+            let escaped = serde_json::to_string(&err_str).unwrap_or_else(|_| r#""unknown""#.to_string());
+            format!(r#"{{"ok":false,"e":{}}}"#, escaped)
         };
         let _ = tx.send(result);
     }
