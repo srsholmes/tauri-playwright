@@ -10,9 +10,13 @@
     "test:e2e": "pnpm --filter hello-world test:e2e",
     "test:unit": "pnpm --filter @srsholmes/tauri-playwright test",
     "lint": "eslint packages/test/src/",
-    "format": "prettier --write 'packages/test/src/**/*.ts'"
+    "format": "prettier --write 'packages/test/src/**/*.ts'",
+    "changeset": "changeset",
+    "version-packages": "changeset version && bash scripts/sync-cargo-version.sh",
+    "release": "pnpm build && changeset publish"
   },
   "devDependencies": {
+    "@changesets/cli": "^2.30.0",
     "@eslint/js": "^10.0.1",
     "eslint": "^10.1.0",
     "eslint-config-prettier": "^10.1.8",
