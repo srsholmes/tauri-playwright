@@ -540,29 +540,37 @@ async fn eval_js<R: Runtime>(
     pending.lock().await.insert(id.clone(), tx);
 
     // Wrap the user script in a try-catch that sends the result back via Tauri IPC.
-    // The script is embedded as a raw string inside a template — we don't need to escape
-    // it because it's evaluated as code, not interpolated into a string literal.
+    // The id is JSON-escaped to prevent injection if the format ever changes.
+    let id_json = serde_json::to_string(&id).unwrap();
     let wrapped_script = format!(
         r#"(async () => {{
+  const __pw_id = {id_json};
   try {{
     const __pw_result = await ({script});
     window.__TAURI_INTERNALS__.invoke('plugin:playwright|pw_result',
-      {{ id: '{id}', ok: true, data: JSON.stringify(__pw_result) }});
+      {{ id: __pw_id, ok: true, data: JSON.stringify(__pw_result) }});
   }} catch(e) {{
     window.__TAURI_INTERNALS__.invoke('plugin:playwright|pw_result',
-      {{ id: '{id}', ok: false, error: String(e && e.message || e) }});
+      {{ id: __pw_id, ok: false, error: String(e && e.message || e) }});
   }}
 }})()"#,
         script = script,
-        id = id,
+        id_json = id_json,
     );
 
-    // Get the webview window and inject the script
-    let webview: WebviewWindow<R> = match app.get_webview_window(window_label) {
-        Some(w) => w,
-        None => {
-            pending.lock().await.remove(&id);
-            return Response::err(format!("window '{}' not found", window_label));
+    // Get the webview window, retrying briefly if it's not ready yet (e.g. during app startup).
+    let webview: WebviewWindow<R> = {
+        let mut attempts = 0;
+        loop {
+            if let Some(w) = app.get_webview_window(window_label) {
+                break w;
+            }
+            attempts += 1;
+            if attempts >= 20 {
+                pending.lock().await.remove(&id);
+                return Response::err(format!("window '{}' not found after retries", window_label));
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
         }
     };
 

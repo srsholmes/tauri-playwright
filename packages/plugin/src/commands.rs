@@ -13,10 +13,11 @@ pub async fn pw_result(
     let mut map = pending.lock().await;
     if let Some(tx) = map.remove(&id) {
         let result = if ok {
-            format!(
-                r#"{{"ok":true,"v":{}}}"#,
-                data.unwrap_or_else(|| "null".to_string())
-            )
+            let v: serde_json::Value = data
+                .as_deref()
+                .and_then(|d| serde_json::from_str(d).ok())
+                .unwrap_or(serde_json::Value::Null);
+            serde_json::json!({"ok": true, "v": v}).to_string()
         } else {
             let err_str = error.unwrap_or_else(|| "unknown".to_string());
             let escaped = serde_json::to_string(&err_str).unwrap_or_else(|_| r#""unknown""#.to_string());
