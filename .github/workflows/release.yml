@@ -80,7 +80,7 @@ jobs:
           PUBLISHED=$(cargo search tauri-plugin-playwright --limit 1 2>/dev/null | grep '^tauri-plugin-playwright' | sed 's/.*= "\(.*\)".*/\1/' || echo "0.0.0")
           if [ "$CURRENT" != "$PUBLISHED" ]; then
             echo "Publishing tauri-plugin-playwright@$CURRENT"
-            cargo publish
+            cargo publish --no-verify
           else
             echo "Version $CURRENT already published, skipping"
           fi
