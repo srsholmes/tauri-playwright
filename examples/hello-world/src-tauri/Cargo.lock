@@ -3777,12 +3777,13 @@ dependencies = [
 
 [[package]]
 name = "tauri-plugin-playwright"
-version = "0.1.0"
+version = "0.2.1"
 dependencies = [
  "log",
  "serde",
  "serde_json",
  "tauri",
+ "tauri-plugin",
  "tokio",
 ]
 

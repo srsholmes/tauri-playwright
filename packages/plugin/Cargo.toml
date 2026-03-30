@@ -9,6 +9,10 @@ homepage = "https://github.com/srsholmes/tauri-playwright"
 readme = "../../README.md"
 authors = ["Simon Holmes"]
 keywords = ["tauri", "playwright", "testing", "e2e", "webdriver"]
+links = "tauri-plugin-playwright"
+
+[build-dependencies]
+tauri-plugin = { version = "2", features = ["build"] }
 
 [dependencies]
 tauri = { version = "2", features = [] }

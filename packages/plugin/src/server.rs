@@ -1,9 +1,9 @@
-use std::collections::{HashMap, VecDeque};
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::sync::{oneshot, Mutex};
-use tauri::{AppHandle, Runtime};
+use tauri::{AppHandle, Manager, Runtime, WebviewWindow};
 
 use crate::commands::{Command, Response};
 use crate::native_capture::RecordingSession;
@@ -12,43 +12,26 @@ static COUNTER: AtomicU64 = AtomicU64::new(0);
 
 pub type PendingResults = Arc<Mutex<HashMap<String, oneshot::Sender<String>>>>;
 pub type RecordingState = Arc<Mutex<Option<RecordingSession>>>;
-pub const CALLBACK_PORT: u16 = 6275;
-
-/// Queue of JS commands waiting to be picked up by the polling webview.
-type CommandQueue = Arc<Mutex<VecDeque<QueuedCommand>>>;
-
-struct QueuedCommand {
-    id: String,
-    script: String,
-}
 
 pub fn start<R: Runtime>(
     app: AppHandle<R>,
     pending: PendingResults,
     socket_path: Option<String>,
     tcp_port: Option<u16>,
+    window_label: Option<String>,
 ) {
     let app = Arc::new(app);
-    let queue: CommandQueue = Arc::new(Mutex::new(VecDeque::new()));
     let recording: RecordingState = Arc::new(Mutex::new(None));
-
-    // Start HTTP server (handles both polling and result callbacks)
-    let pending_http = Arc::clone(&pending);
-    let queue_http = Arc::clone(&queue);
-    tauri::async_runtime::spawn(async move {
-        if let Err(e) = run_http_server(pending_http, queue_http).await {
-            eprintln!("tauri-plugin-playwright: http server error: {}", e);
-        }
-    });
+    let window_label = Arc::new(window_label.unwrap_or_else(|| "main".to_string()));
 
     #[cfg(unix)]
     if let Some(path) = socket_path {
         let app = Arc::clone(&app);
         let pending = Arc::clone(&pending);
-        let queue = Arc::clone(&queue);
         let recording = Arc::clone(&recording);
+        let window_label = Arc::clone(&window_label);
         tauri::async_runtime::spawn(async move {
-            if let Err(e) = run_unix_server(app, pending, queue, recording, &path).await {
+            if let Err(e) = run_unix_server(app, pending, recording, &window_label, &path).await {
                 eprintln!("tauri-plugin-playwright: unix server error: {}", e);
             }
         });
@@ -57,91 +40,21 @@ pub fn start<R: Runtime>(
 
     let port = tcp_port.unwrap_or(6274);
     let pending = Arc::clone(&pending);
-    let queue = Arc::clone(&queue);
     let recording = Arc::clone(&recording);
+    let window_label = Arc::clone(&window_label);
     tauri::async_runtime::spawn(async move {
-        if let Err(e) = run_tcp_server(app, pending, queue, recording, port).await {
+        if let Err(e) = run_tcp_server(app, pending, recording, &window_label, port).await {
             eprintln!("tauri-plugin-playwright: tcp server error: {}", e);
         }
     });
-}
-
-/// HTTP server that handles:
-/// - GET /pw-poll — returns next queued JS command (or 204 if empty)
-/// - POST /pw — receives JS execution results
-async fn run_http_server(
-    pending: PendingResults,
-    queue: CommandQueue,
-) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{}", CALLBACK_PORT)).await?;
-    eprintln!("tauri-plugin-playwright: http server on http://127.0.0.1:{}", CALLBACK_PORT);
-
-    loop {
-        let (mut stream, _) = listener.accept().await?;
-        let pending = Arc::clone(&pending);
-        let queue = Arc::clone(&queue);
-
-        tauri::async_runtime::spawn(async move {
-            let mut buf = vec![0u8; 65536];
-            let n = match tokio::io::AsyncReadExt::read(&mut stream, &mut buf).await {
-                Ok(n) if n > 0 => n,
-                _ => return,
-            };
-            let request = String::from_utf8_lossy(&buf[..n]).to_string();
-
-            // Parse method and path from first line
-            let first_line = request.lines().next().unwrap_or("");
-
-            if first_line.starts_with("GET /pw-poll") {
-                // Return next queued command
-                let mut q = queue.lock().await;
-                if let Some(cmd) = q.pop_front() {
-                    let json = serde_json::json!({ "id": cmd.id, "script": cmd.script });
-                    let body = serde_json::to_string(&json).unwrap();
-                    let resp = format!(
-                        "HTTP/1.1 200 OK\r\nAccess-Control-Allow-Origin: *\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}",
-                        body.len(), body
-                    );
-                    let _ = AsyncWriteExt::write_all(&mut stream, resp.as_bytes()).await;
-                } else {
-                    let resp = "HTTP/1.1 204 No Content\r\nAccess-Control-Allow-Origin: *\r\nContent-Length: 0\r\n\r\n";
-                    let _ = AsyncWriteExt::write_all(&mut stream, resp.as_bytes()).await;
-                }
-            } else if first_line.starts_with("POST /pw") {
-                // Receive result from JS
-                if let Some(body_start) = request.find("\r\n\r\n") {
-                    let body = &request[body_start + 4..];
-                    if let Ok(v) = serde_json::from_str::<serde_json::Value>(body) {
-                        let id = v.get("id").and_then(|v| v.as_str()).unwrap_or("").to_string();
-                        let result = v.get("result").and_then(|v| v.as_str()).unwrap_or("").to_string();
-                        if !id.is_empty() {
-                            let mut map = pending.lock().await;
-                            if let Some(tx) = map.remove(&id) {
-                                let _ = tx.send(result);
-                            }
-                        }
-                    }
-                }
-                let resp = "HTTP/1.1 200 OK\r\nAccess-Control-Allow-Origin: *\r\nContent-Length: 2\r\n\r\nok";
-                let _ = AsyncWriteExt::write_all(&mut stream, resp.as_bytes()).await;
-            } else if first_line.starts_with("OPTIONS") {
-                // CORS preflight
-                let resp = "HTTP/1.1 204 No Content\r\nAccess-Control-Allow-Origin: *\r\nAccess-Control-Allow-Methods: GET, POST, OPTIONS\r\nAccess-Control-Allow-Headers: Content-Type\r\nContent-Length: 0\r\n\r\n";
-                let _ = AsyncWriteExt::write_all(&mut stream, resp.as_bytes()).await;
-            } else {
-                let resp = "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n";
-                let _ = AsyncWriteExt::write_all(&mut stream, resp.as_bytes()).await;
-            }
-        });
-    }
 }
 
 #[cfg(unix)]
 async fn run_unix_server<R: Runtime>(
     app: Arc<AppHandle<R>>,
     pending: PendingResults,
-    queue: CommandQueue,
     recording: RecordingState,
+    window_label: &str,
     path: &str,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let _ = std::fs::remove_file(path);
@@ -152,11 +65,11 @@ async fn run_unix_server<R: Runtime>(
         let (stream, _) = listener.accept().await?;
         let app = Arc::clone(&app);
         let pending = Arc::clone(&pending);
-        let queue = Arc::clone(&queue);
         let recording = Arc::clone(&recording);
+        let wl = window_label.to_string();
         tauri::async_runtime::spawn(async move {
             let (reader, writer) = stream.into_split();
-            handle_connection(app, pending, queue, recording, reader, writer).await;
+            handle_connection(app, pending, recording, &wl, reader, writer).await;
         });
     }
 }
@@ -164,8 +77,8 @@ async fn run_unix_server<R: Runtime>(
 async fn run_tcp_server<R: Runtime>(
     app: Arc<AppHandle<R>>,
     pending: PendingResults,
-    queue: CommandQueue,
     recording: RecordingState,
+    window_label: &str,
     port: u16,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let listener = tokio::net::TcpListener::bind(format!("127.0.0.1:{}", port)).await?;
@@ -175,20 +88,20 @@ async fn run_tcp_server<R: Runtime>(
         let (stream, _) = listener.accept().await?;
         let app = Arc::clone(&app);
         let pending = Arc::clone(&pending);
-        let queue = Arc::clone(&queue);
         let recording = Arc::clone(&recording);
+        let wl = window_label.to_string();
         tauri::async_runtime::spawn(async move {
             let (reader, writer) = stream.into_split();
-            handle_connection(app, pending, queue, recording, reader, writer).await;
+            handle_connection(app, pending, recording, &wl, reader, writer).await;
         });
     }
 }
 
 async fn handle_connection<R: Runtime, Reader, Writer>(
-    _app: Arc<AppHandle<R>>,
+    app: Arc<AppHandle<R>>,
     pending: PendingResults,
-    queue: CommandQueue,
     recording: RecordingState,
+    window_label: &str,
     reader: Reader,
     mut writer: Writer,
 ) where
@@ -202,7 +115,7 @@ async fn handle_connection<R: Runtime, Reader, Writer>(
         if line.is_empty() { continue; }
 
         let response = match serde_json::from_str::<Command>(&line) {
-            Ok(cmd) => execute_command(&pending, &queue, &recording, cmd).await,
+            Ok(cmd) => execute_command(&app, &pending, &recording, window_label, cmd).await,
             Err(e) => Response::err(format!("invalid command: {}", e)),
         };
 
@@ -240,81 +153,82 @@ fn query_js(selector: &str, timeout_ms: u64, return_expr: &str) -> String {
     )
 }
 
-async fn execute_command(
+async fn execute_command<R: Runtime>(
+    app: &Arc<AppHandle<R>>,
     pending: &PendingResults,
-    queue: &CommandQueue,
     recording: &RecordingState,
+    window_label: &str,
     cmd: Command,
 ) -> Response {
     match cmd {
         Command::Ping => Response::ok(serde_json::json!("pong")),
-        Command::Eval { script } => eval_js(pending, queue, &script).await,
+        Command::Eval { script } => eval_js(app, pending, window_label, &script).await,
 
         // ── Actions (auto-wait for visible + enabled) ─────────────────
 
         Command::Click { selector, timeout_ms } => {
-            eval_js(pending, queue, &action_js(&selector, timeout_ms,
+            eval_js(app, pending, window_label, &action_js(&selector, timeout_ms,
                 "el.scrollIntoView({block:'center'}); el.click(); return null"
             )).await
         }
         Command::Dblclick { selector, timeout_ms } => {
-            eval_js(pending, queue, &action_js(&selector, timeout_ms,
+            eval_js(app, pending, window_label, &action_js(&selector, timeout_ms,
                 "el.scrollIntoView({block:'center'}); el.dispatchEvent(new MouseEvent('dblclick',{bubbles:true})); return null"
             )).await
         }
         Command::Hover { selector, timeout_ms } => {
-            eval_js(pending, queue, &action_js(&selector, timeout_ms,
+            eval_js(app, pending, window_label, &action_js(&selector, timeout_ms,
                 "el.scrollIntoView({block:'center'}); var r2=el.getBoundingClientRect(); var cx=r2.left+r2.width/2; var cy=r2.top+r2.height/2; el.dispatchEvent(new MouseEvent('mouseenter',{bubbles:true,clientX:cx,clientY:cy})); el.dispatchEvent(new MouseEvent('mouseover',{bubbles:true,clientX:cx,clientY:cy})); return null"
             )).await
         }
         Command::Fill { selector, text, timeout_ms } => {
             let t = json_str(&text);
-            eval_js(pending, queue, &action_js(&selector, timeout_ms, &format!(
+            eval_js(app, pending, window_label, &action_js(&selector, timeout_ms, &format!(
                 "el.focus(); var desc=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value'); if(desc&&desc.set) desc.set.call(el,{t}); else el.value={t}; el.dispatchEvent(new Event('input',{{bubbles:true}})); el.dispatchEvent(new Event('change',{{bubbles:true}})); return null", t=t
             ))).await
         }
         Command::TypeText { selector, text, timeout_ms } => {
             let t = json_str(&text);
-            eval_js(pending, queue, &action_js(&selector, timeout_ms, &format!(
+            eval_js(app, pending, window_label, &action_js(&selector, timeout_ms, &format!(
                 "el.focus(); for(var i=0;i<{t}.length;i++){{ var ch={t}[i]; el.dispatchEvent(new KeyboardEvent('keydown',{{key:ch,bubbles:true}})); var desc=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value'); if(desc&&desc.set) desc.set.call(el,el.value+ch); else el.value+=ch; el.dispatchEvent(new Event('input',{{bubbles:true}})); el.dispatchEvent(new KeyboardEvent('keyup',{{key:ch,bubbles:true}})); }} return null", t=t
             ))).await
         }
         Command::Press { selector, key, timeout_ms } => {
             let k = json_str(&key);
-            eval_js(pending, queue, &action_js(&selector, timeout_ms, &format!(
+            eval_js(app, pending, window_label, &action_js(&selector, timeout_ms, &format!(
                 "el.focus(); var o={{key:{k},bubbles:true}}; el.dispatchEvent(new KeyboardEvent('keydown',o)); el.dispatchEvent(new KeyboardEvent('keypress',o)); el.dispatchEvent(new KeyboardEvent('keyup',o)); return null", k=k
             ))).await
         }
         Command::Check { selector, timeout_ms } => {
-            eval_js(pending, queue, &action_js(&selector, timeout_ms,
+            eval_js(app, pending, window_label, &action_js(&selector, timeout_ms,
                 "if(!el.checked){ el.click(); } return null"
             )).await
         }
         Command::Uncheck { selector, timeout_ms } => {
-            eval_js(pending, queue, &action_js(&selector, timeout_ms,
+            eval_js(app, pending, window_label, &action_js(&selector, timeout_ms,
                 "if(el.checked){ el.click(); } return null"
             )).await
         }
         Command::SelectOption { selector, value, timeout_ms } => {
             let v = json_str(&value);
-            eval_js(pending, queue, &action_js(&selector, timeout_ms, &format!(
+            eval_js(app, pending, window_label, &action_js(&selector, timeout_ms, &format!(
                 "el.value={v}; el.dispatchEvent(new Event('change',{{bubbles:true}})); return el.value", v=v
             ))).await
         }
         Command::Focus { selector, timeout_ms } => {
-            eval_js(pending, queue, &query_js(&selector, timeout_ms,
+            eval_js(app, pending, window_label, &query_js(&selector, timeout_ms,
                 "(function(){ el.focus(); return null; })()"
             )).await
         }
         Command::Blur { selector, timeout_ms } => {
-            eval_js(pending, queue, &query_js(&selector, timeout_ms,
+            eval_js(app, pending, window_label, &query_js(&selector, timeout_ms,
                 "(function(){ el.blur(); return null; })()"
             )).await
         }
         Command::DragAndDrop { source, target, timeout_ms } => {
             let src = json_str(&source);
             let tgt = json_str(&target);
-            eval_js(pending, queue, &format!(
+            eval_js(app, pending, window_label, &format!(
                 r#"(async function(){{
                     var dl=Date.now()+{t};
                     while(Date.now()<dl){{
@@ -345,7 +259,7 @@ async fn execute_command(
                     json_str(&f.name), json_str(&f.mime_type), json_str(&f.base64))
             }).collect();
             let arr = format!("[{}]", files_json.join(","));
-            eval_js(pending, queue, &query_js(&selector, timeout_ms, &format!(
+            eval_js(app, pending, window_label, &query_js(&selector, timeout_ms, &format!(
                 r#"(function(){{ var files={arr}; var dt=new DataTransfer(); for(var i=0;i<files.length;i++){{ var f=files[i]; var bin=atob(f.b64); var bytes=new Uint8Array(bin.length); for(var j=0;j<bin.length;j++) bytes[j]=bin.charCodeAt(j); dt.items.add(new File([bytes],f.name,{{type:f.mime}})); }} el.files=dt.files; el.dispatchEvent(new Event('change',{{bubbles:true}})); return el.files.length; }})()"#, arr=arr
             ))).await
         }
@@ -353,23 +267,23 @@ async fn execute_command(
         // ── Queries (auto-wait for element to exist) ──────────────────
 
         Command::TextContent { selector, timeout_ms } => {
-            eval_js(pending, queue, &query_js(&selector, timeout_ms, "el.textContent")).await
+            eval_js(app, pending, window_label, &query_js(&selector, timeout_ms, "el.textContent")).await
         }
         Command::InnerHtml { selector, timeout_ms } => {
-            eval_js(pending, queue, &query_js(&selector, timeout_ms, "el.innerHTML")).await
+            eval_js(app, pending, window_label, &query_js(&selector, timeout_ms, "el.innerHTML")).await
         }
         Command::InnerText { selector, timeout_ms } => {
-            eval_js(pending, queue, &query_js(&selector, timeout_ms, "el.innerText")).await
+            eval_js(app, pending, window_label, &query_js(&selector, timeout_ms, "el.innerText")).await
         }
         Command::GetAttribute { selector, name, timeout_ms } => {
             let n = json_str(&name);
-            eval_js(pending, queue, &query_js(&selector, timeout_ms, &format!("el.getAttribute({n})", n=n))).await
+            eval_js(app, pending, window_label, &query_js(&selector, timeout_ms, &format!("el.getAttribute({n})", n=n))).await
         }
         Command::InputValue { selector, timeout_ms } => {
-            eval_js(pending, queue, &query_js(&selector, timeout_ms, "el.value||''")).await
+            eval_js(app, pending, window_label, &query_js(&selector, timeout_ms, "el.value||''")).await
         }
         Command::BoundingBox { selector, timeout_ms } => {
-            eval_js(pending, queue, &query_js(&selector, timeout_ms,
+            eval_js(app, pending, window_label, &query_js(&selector, timeout_ms,
                 "(function(){ var r2=el.getBoundingClientRect(); return {x:r2.left,y:r2.top,width:r2.width,height:r2.height}; })()"
             )).await
         }
@@ -378,25 +292,25 @@ async fn execute_command(
 
         Command::IsVisible { selector } => {
             let s = json_str(&selector);
-            eval_js(pending, queue, &format!(
+            eval_js(app, pending, window_label, &format!(
                 r#"(function(){{ var el=document.querySelector({s}); if(!el) return false; var r=el.getBoundingClientRect(); var st=getComputedStyle(el); return r.width>0&&r.height>0&&st.visibility!=='hidden'&&st.display!=='none'&&parseFloat(st.opacity)>0; }})()"#, s=s
             )).await
         }
         Command::IsChecked { selector } => {
             let s = json_str(&selector);
-            eval_js(pending, queue, &format!(
+            eval_js(app, pending, window_label, &format!(
                 r#"(function(){{ var el=document.querySelector({s}); if(!el) return false; return !!el.checked; }})()"#, s=s
             )).await
         }
         Command::IsDisabled { selector } => {
             let s = json_str(&selector);
-            eval_js(pending, queue, &format!(
+            eval_js(app, pending, window_label, &format!(
                 r#"(function(){{ var el=document.querySelector({s}); if(!el) return true; return el.disabled===true||el.hasAttribute('disabled'); }})()"#, s=s
             )).await
         }
         Command::IsEditable { selector } => {
             let s = json_str(&selector);
-            eval_js(pending, queue, &format!(
+            eval_js(app, pending, window_label, &format!(
                 r#"(function(){{ var el=document.querySelector({s}); if(!el) return false; if(el.disabled||el.readOnly) return false; var tag=el.tagName; return tag==='INPUT'||tag==='TEXTAREA'||tag==='SELECT'||el.isContentEditable; }})()"#, s=s
             )).await
         }
@@ -405,39 +319,39 @@ async fn execute_command(
 
         Command::AllTextContents { selector } => {
             let s = json_str(&selector);
-            eval_js(pending, queue, &format!(
+            eval_js(app, pending, window_label, &format!(
                 r#"Array.from(document.querySelectorAll({s})).map(function(el){{ return el.textContent||''; }})"#, s=s
             )).await
         }
         Command::AllInnerTexts { selector } => {
             let s = json_str(&selector);
-            eval_js(pending, queue, &format!(
+            eval_js(app, pending, window_label, &format!(
                 r#"Array.from(document.querySelectorAll({s})).map(function(el){{ return el.innerText||''; }})"#, s=s
             )).await
         }
         Command::Count { selector } => {
             let s = json_str(&selector);
-            eval_js(pending, queue, &format!(r#"document.querySelectorAll({s}).length"#, s=s)).await
+            eval_js(app, pending, window_label, &format!(r#"document.querySelectorAll({s}).length"#, s=s)).await
         }
 
         // ── Waiting ───────────────────────────────────────────────────
 
         Command::WaitForSelector { selector, timeout_ms } => {
             let s = json_str(&selector);
-            eval_js(pending, queue, &format!(
+            eval_js(app, pending, window_label, &format!(
                 r#"(async function(){{ var dl=Date.now()+{t}; while(Date.now()<dl){{ var el=document.querySelector({s}); if(el){{ var r=el.getBoundingClientRect(); var st=getComputedStyle(el); if(r.width>0&&r.height>0&&st.visibility!=='hidden'&&st.display!=='none') return true; }} await new Promise(function(r){{setTimeout(r,50)}}); }} throw new Error('timeout waiting for '+{s}); }})()"#,
                 s=s, t=timeout_ms
             )).await
         }
         Command::WaitForFunction { expression, timeout_ms } => {
             let e = json_str(&expression);
-            eval_js(pending, queue, &format!(
-                r#"(async function(){{ var dl=Date.now()+{t}; while(Date.now()<dl){{ try{{ var r=eval({e}); if(r) return r; }}catch(ex){{}} await new Promise(function(r){{setTimeout(r,100)}}); }} throw new Error('waitForFunction timeout: '+{e}); }})()"#,
-                e=e, t=timeout_ms
+            eval_js(app, pending, window_label, &format!(
+                r#"(async function(){{ var dl=Date.now()+{t}; while(Date.now()<dl){{ try{{ var r=({expr}); if(r) return r; }}catch(ex){{}} await new Promise(function(r){{setTimeout(r,100)}}); }} throw new Error('waitForFunction timeout: '+{e}); }})()"#,
+                expr=expression, e=e, t=timeout_ms
             )).await
         }
         Command::Content => {
-            eval_js(pending, queue, "document.documentElement.outerHTML").await
+            eval_js(app, pending, window_label, "document.documentElement.outerHTML").await
         }
         Command::InstallDialogHandler { default_confirm, default_prompt_text } => {
             let confirm_val = if default_confirm { "true" } else { "false" };
@@ -445,7 +359,7 @@ async fn execute_command(
                 Some(t) => json_str(t),
                 None => "null".to_string(),
             };
-            eval_js(pending, queue, &format!(
+            eval_js(app, pending, window_label, &format!(
                 r#"(function(){{
                     window.__pw_dialogs=window.__pw_dialogs||[];
                     window.__pw_confirm_val={cv};
@@ -458,16 +372,16 @@ async fn execute_command(
             )).await
         }
         Command::GetDialogs => {
-            eval_js(pending, queue, "window.__pw_dialogs||[]").await
+            eval_js(app, pending, window_label, "window.__pw_dialogs||[]").await
         }
         Command::ClearDialogs => {
-            eval_js(pending, queue, "(function(){ window.__pw_dialogs=[]; return null; })()").await
+            eval_js(app, pending, window_label, "(function(){ window.__pw_dialogs=[]; return null; })()").await
         }
         Command::AddNetworkRoute { pattern, status, body, content_type } => {
             let p = json_str(&pattern);
             let b = json_str(&body);
             let ct = json_str(content_type.as_deref().unwrap_or("application/json"));
-            eval_js(pending, queue, &format!(
+            eval_js(app, pending, window_label, &format!(
                 r#"(function(){{
                     if(!window.__pw_routes){{
                         window.__pw_routes=[];
@@ -515,61 +429,61 @@ async fn execute_command(
         }
         Command::RemoveNetworkRoute { pattern } => {
             let p = json_str(&pattern);
-            eval_js(pending, queue, &format!(
+            eval_js(app, pending, window_label, &format!(
                 r#"(function(){{ if(!window.__pw_routes) return 0; window.__pw_routes=window.__pw_routes.filter(function(r){{return r.pattern!=={p}}}); return window.__pw_routes.length; }})()"#, p=p
             )).await
         }
         Command::ClearNetworkRoutes => {
-            eval_js(pending, queue, "(function(){ window.__pw_routes=[]; return null; })()").await
+            eval_js(app, pending, window_label, "(function(){ window.__pw_routes=[]; return null; })()").await
         }
         Command::GetNetworkRequests => {
-            eval_js(pending, queue, "window.__pw_net_requests||[]").await
+            eval_js(app, pending, window_label, "window.__pw_net_requests||[]").await
         }
         Command::ClearNetworkRequests => {
-            eval_js(pending, queue, "(function(){ window.__pw_net_requests=[]; return null; })()").await
+            eval_js(app, pending, window_label, "(function(){ window.__pw_net_requests=[]; return null; })()").await
         }
         Command::DispatchEvent { selector, event_type, timeout_ms } => {
             let e = json_str(&event_type);
-            eval_js(pending, queue, &action_js(&selector, timeout_ms, &format!(
+            eval_js(app, pending, window_label, &action_js(&selector, timeout_ms, &format!(
                 "el.dispatchEvent(new Event({e},{{bubbles:true}})); return null", e=e
             ))).await
         }
         Command::GetComputedStyle { selector, property, timeout_ms } => {
             let p = json_str(&property);
-            eval_js(pending, queue, &query_js(&selector, timeout_ms, &format!(
+            eval_js(app, pending, window_label, &query_js(&selector, timeout_ms, &format!(
                 "getComputedStyle(el).getPropertyValue({p})", p=p
             ))).await
         }
         Command::IsFocused { selector } => {
             let s = json_str(&selector);
-            eval_js(pending, queue, &format!(
+            eval_js(app, pending, window_label, &format!(
                 r#"(function(){{ var el=document.querySelector({s}); return el!==null&&document.activeElement===el; }})()"#, s=s
             )).await
         }
-        Command::Title => eval_js(pending, queue, "document.title").await,
-        Command::Url => eval_js(pending, queue, "window.location.href").await,
+        Command::Title => eval_js(app, pending, window_label, "document.title").await,
+        Command::Url => eval_js(app, pending, window_label, "window.location.href").await,
         Command::Goto { url } => {
             let u = json_str(&url);
-            eval_js(pending, queue, &format!(r#"(function(){{ window.location.href={u}; return null; }})()"#, u=u)).await
+            eval_js(app, pending, window_label, &format!(r#"(function(){{ window.location.href={u}; return null; }})()"#, u=u)).await
         }
         Command::Reload => {
-            eval_js(pending, queue, "(function(){ window.location.reload(); return null; })()").await
+            eval_js(app, pending, window_label, "(function(){ window.location.reload(); return null; })()").await
         }
         Command::GoBack => {
-            eval_js(pending, queue, "(function(){ window.history.back(); return null; })()").await
+            eval_js(app, pending, window_label, "(function(){ window.history.back(); return null; })()").await
         }
         Command::GoForward => {
-            eval_js(pending, queue, "(function(){ window.history.forward(); return null; })()").await
+            eval_js(app, pending, window_label, "(function(){ window.history.forward(); return null; })()").await
         }
         Command::WaitForUrl { pattern, timeout_ms } => {
             let p = json_str(&pattern);
-            eval_js(pending, queue, &format!(
+            eval_js(app, pending, window_label, &format!(
                 r#"(async function(){{ var dl=Date.now()+{t}; while(Date.now()<dl){{ if(window.location.href.includes({p})||new RegExp({p}).test(window.location.href)) return window.location.href; await new Promise(function(r){{setTimeout(r,100)}}); }} throw new Error('timeout waiting for URL matching '+{p}); }})()"#,
                 p=p, t=timeout_ms
             )).await
         }
         Command::Screenshot { path } => {
-            take_screenshot(pending, queue, path).await
+            take_screenshot(app, pending, window_label, path).await
         }
         Command::NativeScreenshot { path } => {
             take_native_screenshot(path).await
@@ -612,10 +526,12 @@ async fn execute_command(
     }
 }
 
-/// Queue a JS script for execution by the polling webview, then wait for the result.
-async fn eval_js(
+/// Inject JS into the webview via `WebviewWindow::eval()` and wait for the result
+/// to come back through the Tauri IPC `pw_result` command.
+async fn eval_js<R: Runtime>(
+    app: &Arc<AppHandle<R>>,
     pending: &PendingResults,
-    queue: &CommandQueue,
+    window_label: &str,
     script: &str,
 ) -> Response {
     let id = format!("pw{}", COUNTER.fetch_add(1, Ordering::SeqCst));
@@ -623,13 +539,39 @@ async fn eval_js(
     let (tx, rx) = oneshot::channel::<String>();
     pending.lock().await.insert(id.clone(), tx);
 
-    // Queue the command for the polling JS to pick up
-    queue.lock().await.push_back(QueuedCommand {
-        id: id.clone(),
-        script: script.to_string(),
-    });
+    // Wrap the user script in a try-catch that sends the result back via Tauri IPC.
+    // The script is embedded as a raw string inside a template — we don't need to escape
+    // it because it's evaluated as code, not interpolated into a string literal.
+    let wrapped_script = format!(
+        r#"(async () => {{
+  try {{
+    const __pw_result = await ({script});
+    window.__TAURI_INTERNALS__.invoke('plugin:playwright|pw_result',
+      {{ id: '{id}', ok: true, data: JSON.stringify(__pw_result) }});
+  }} catch(e) {{
+    window.__TAURI_INTERNALS__.invoke('plugin:playwright|pw_result',
+      {{ id: '{id}', ok: false, error: String(e && e.message || e) }});
+  }}
+}})()"#,
+        script = script,
+        id = id,
+    );
 
-    // Wait for the JS to execute and POST the result back
+    // Get the webview window and inject the script
+    let webview: WebviewWindow<R> = match app.get_webview_window(window_label) {
+        Some(w) => w,
+        None => {
+            pending.lock().await.remove(&id);
+            return Response::err(format!("window '{}' not found", window_label));
+        }
+    };
+
+    if let Err(e) = webview.eval(&wrapped_script) {
+        pending.lock().await.remove(&id);
+        return Response::err(format!("eval failed: {}", e));
+    }
+
+    // Wait for the JS to execute and send the result back via IPC
     match tokio::time::timeout(std::time::Duration::from_secs(30), rx).await {
         Ok(Ok(result_json)) => {
             match serde_json::from_str::<serde_json::Value>(&result_json) {
@@ -653,14 +595,12 @@ async fn eval_js(
 }
 
 /// Take a screenshot by loading html2canvas in the webview and rendering to PNG.
-async fn take_screenshot(
+async fn take_screenshot<R: Runtime>(
+    app: &Arc<AppHandle<R>>,
     pending: &PendingResults,
-    queue: &CommandQueue,
+    window_label: &str,
     path: Option<String>,
 ) -> Response {
-    // Capture screenshot using SVG foreignObject → Canvas → data URL.
-    // This is a pure inline approach that works without external dependencies.
-    // Limitation: won't capture images loaded from external URLs (tainted canvas).
     let script = r#"
 (async function() {
   var w = document.documentElement.scrollWidth;
@@ -722,7 +662,7 @@ async fn take_screenshot(
 })()
 "#;
 
-    let result = eval_js(pending, queue, script).await;
+    let result = eval_js(app, pending, window_label, script).await;
 
     if !result.ok {
         return result;

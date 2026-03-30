@@ -18,11 +18,11 @@ Three testing modes from the same test files:
 
 ```
 ┌──────────────────┐  socket/JSON  ┌──────────────────────────────────┐
-│  Playwright       │◄────────────►│  tauri-plugin-playwright          │
+│  Playwright       │─────────────►│  tauri-plugin-playwright          │
 │  test runner      │              │  (Rust, embedded in your app)     │
 │                   │              │                                   │
-│  @srsholmes/      │              │  Socket server → JS injection     │
-│  tauri-playwright │              │  HTTP polling  ← JS results       │
+│  @srsholmes/      │              │  webview.eval() → JS executes     │
+│  tauri-playwright │◄─────────────│  Tauri IPC invoke ← JS results   │
 └──────────────────┘              └──────────────────────────────────┘
 ```
 
@@ -438,15 +438,29 @@ expect(calls).toContainEqual(
 ```rust
 use tauri_plugin_playwright::PluginConfig;
 
-// Default: Unix socket at /tmp/tauri-playwright.sock
+// Default: Unix socket at /tmp/tauri-playwright.sock, targets the "main" window
 builder = builder.plugin(tauri_plugin_playwright::init());
 
-// Custom socket path + TCP fallback
+// Custom socket path + TCP fallback + custom window label
 builder = builder.plugin(tauri_plugin_playwright::init_with_config(
     PluginConfig::new()
         .socket_path("/tmp/my-app-pw.sock")
         .tcp_port(6274)
+        .window_label("my-window")  // default: "main"
 ));
+```
+
+Your app must include the `playwright:default` capability so the JS side can invoke
+the `pw_result` command back to Rust. Add it to your capability file:
+
+```json
+// src-tauri/capabilities/default.json
+{
+  "permissions": [
+    "playwright:default",
+    ...
+  ]
+}
 ```
 
 ## CDP Mode (Windows)

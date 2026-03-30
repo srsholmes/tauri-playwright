@@ -8,6 +8,7 @@
     "core:event:default",
     "core:event:allow-listen",
     "core:event:allow-emit",
-    "opener:default"
+    "opener:default",
+    "playwright:default"
   ]
 }
