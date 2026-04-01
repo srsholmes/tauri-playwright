@@ -56,6 +56,51 @@ jobs:
           path: examples/hello-world/playwright-report/
           retention-days: 7
 
+  bun-browser-tests:
+    name: Bun Browser-Only E2E
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      # Build the package with pnpm (tsup needs node)
+      - run: pnpm install
+      - run: pnpm --filter @srsholmes/tauri-playwright build
+
+      # Install deps with Bun in the Bun example
+      - run: bun install
+        working-directory: examples/hello-world-bun
+      - run: bunx playwright install chromium --with-deps
+        working-directory: examples/hello-world-bun
+
+      # Run browser-only E2E tests under Bun
+      - name: Run Bun browser-only E2E tests
+        working-directory: examples/hello-world-bun
+        run: bun run test:e2e
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bun-browser-test-results
+          path: examples/hello-world-bun/test-results/
+          retention-days: 7
+
+      - name: Upload HTML report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bun-browser-playwright-report
+          path: examples/hello-world-bun/playwright-report/
+          retention-days: 7
+
   tauri-tests:
     name: Tauri E2E (macOS)
     runs-on: macos-latest

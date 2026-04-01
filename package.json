@@ -8,6 +8,7 @@
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck",
     "test:e2e": "pnpm --filter hello-world test:e2e",
+    "test:bun": "cd examples/hello-world-bun && bun run test:e2e",
     "test:unit": "pnpm --filter @srsholmes/tauri-playwright test",
     "lint": "eslint packages/test/src/",
     "format": "prettier --write 'packages/test/src/**/*.ts'",
