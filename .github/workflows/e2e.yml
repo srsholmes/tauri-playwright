@@ -80,6 +80,22 @@ jobs:
       - run: bunx playwright install chromium --with-deps
         working-directory: examples/hello-world-bun
 
+      # Start Vite dev server in the background so Playwright reuses it
+      # (Bun's child_process polyfill can't spawn Playwright's webServer)
+      - name: Start Vite dev server
+        working-directory: examples/hello-world
+        run: npx vite --port 1421 &
+
+      - name: Wait for dev server
+        run: |
+          for i in $(seq 1 30); do
+            if curl -s http://localhost:1421 > /dev/null 2>&1; then
+              echo "Dev server ready after ${i}s"
+              break
+            fi
+            sleep 1
+          done
+
       # Run browser-only E2E tests under Bun
       - name: Run Bun browser-only E2E tests
         working-directory: examples/hello-world-bun
