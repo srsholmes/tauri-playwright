@@ -5,7 +5,7 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::sync::{oneshot, Mutex};
 use tauri::{AppHandle, Manager, Runtime, WebviewWindow};
 
-use crate::commands::{Command, Response};
+use crate::commands::{Command, CommandEnvelope, Response};
 use crate::native_capture::RecordingSession;
 
 static COUNTER: AtomicU64 = AtomicU64::new(0);
@@ -114,8 +114,11 @@ async fn handle_connection<R: Runtime, Reader, Writer>(
         let line = line.trim().to_string();
         if line.is_empty() { continue; }
 
-        let response = match serde_json::from_str::<Command>(&line) {
-            Ok(cmd) => execute_command(&app, &pending, &recording, window_label, cmd).await,
+        let response = match serde_json::from_str::<CommandEnvelope>(&line) {
+            Ok(envelope) => {
+                let target = envelope.window.as_deref().unwrap_or(window_label);
+                execute_command(&app, &pending, &recording, target, envelope.cmd).await
+            }
             Err(e) => Response::err(format!("invalid command: {}", e)),
         };
 

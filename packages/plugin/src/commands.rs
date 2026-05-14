@@ -28,6 +28,26 @@ pub async fn pw_result(
     Ok(())
 }
 
+/// Wire-level envelope for incoming commands.
+///
+/// The optional `window` field selects which webview window the command targets.
+/// When omitted, the server falls back to the plugin's configured default window
+/// label. Existing clients that send a bare `Command` (no `window` field) still
+/// parse cleanly thanks to `#[serde(flatten)]` + `Option<String>`, so this
+/// wrapper is fully backward compatible with the pre-0.3 wire protocol.
+#[derive(Debug, Deserialize)]
+pub struct CommandEnvelope {
+    /// Webview window label to target. Falls back to the plugin's default when `None`.
+    #[serde(default)]
+    pub window: Option<String>,
+
+    /// The actual command. Flattened so the discriminator (`type`) and the
+    /// command's own fields sit at the top level of the JSON object — matching
+    /// the legacy wire format.
+    #[serde(flatten)]
+    pub cmd: Command,
+}
+
 /// A command sent from the Playwright test runner to the plugin.
 /// Protocol: newline-delimited JSON over Unix socket or TCP.
 #[derive(Debug, Deserialize)]
