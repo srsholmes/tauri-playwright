@@ -433,6 +433,44 @@ expect(calls).toContainEqual(
 );
 ```
 
+## Multi-window testing
+
+Tauri apps often open additional webview windows at runtime — viewers, settings
+dialogs, modals. Since plugin version 0.3.0, each command can target a specific
+window by label, so the same socket drives every window from one test.
+
+Discover a newly-opened window and scope a `TauriPage` to it:
+
+```ts
+test('viewer opens and shows the file', async ({ tauriPage }) => {
+  await tauriPage.click('[data-testid="btn-open-viewer"]');
+
+  // Poll until a window whose URL ends with /viewer appears (default 5s timeout).
+  const viewer = await tauriPage.waitForWindow((w) => w.url.endsWith('/viewer'));
+
+  // From here, every command on `viewer` targets that window. The original
+  // `tauriPage` still drives the main window.
+  await expect(viewer.getByTestId('file-name')).toHaveText('photo.jpg');
+  await viewer.click('[data-testid="btn-close"]');
+});
+```
+
+Other ways to scope a page to a window:
+
+```ts
+// By exact label (must match Tauri's `WebviewWindow::label()`)
+const settings = tauriPage.window('settings');
+await settings.fill('input[name="theme"]', 'dark');
+
+// List every open window
+const windows = await tauriPage.listWindows();
+// → [{ label: 'main', url: '...', title: '...', visible: true }, ...]
+```
+
+`page.window(label)` shares the same underlying socket — no new connection is
+opened. `waitForWindow()` polls every 100 ms and accepts an optional
+`{ timeout }` (default 5000 ms).
+
 ## Plugin Configuration
 
 ```rust
