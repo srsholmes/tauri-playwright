@@ -288,6 +288,13 @@ pub enum Command {
         fps: u32,
     },
     StopRecording,
+
+    // ── Multi-window ──────────────────────────────────────────────────
+
+    /// List all open webview windows. Used by tests to discover newly-opened
+    /// windows (e.g., a viewer, a settings dialog) and scope subsequent
+    /// commands to them via the envelope's `window` field.
+    ListWindows,
 }
 
 fn default_timeout() -> u64 {
@@ -305,6 +312,19 @@ pub struct FilePayload {
     pub mime_type: String,
     /// Base64-encoded file content.
     pub base64: String,
+}
+
+/// Information about a single webview window, returned by `ListWindows`.
+#[derive(Debug, Serialize)]
+pub struct WindowInfo {
+    /// The window's Tauri label (passed to the envelope's `window` field).
+    pub label: String,
+    /// The URL currently loaded in the window's webview.
+    pub url: String,
+    /// The window's title bar text.
+    pub title: String,
+    /// Whether the window is currently visible (not minimised/hidden).
+    pub visible: bool,
 }
 
 /// Response sent back to the Playwright test runner.

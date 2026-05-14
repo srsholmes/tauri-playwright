@@ -5,7 +5,7 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::sync::{oneshot, Mutex};
 use tauri::{AppHandle, Manager, Runtime, WebviewWindow};
 
-use crate::commands::{Command, CommandEnvelope, Response};
+use crate::commands::{Command, CommandEnvelope, Response, WindowInfo};
 use crate::native_capture::RecordingSession;
 
 static COUNTER: AtomicU64 = AtomicU64::new(0);
@@ -526,6 +526,27 @@ async fn execute_command<R: Runtime>(
                 None => Response::err("no recording in progress"),
             }
         }
+        Command::ListWindows => list_windows(app).await,
+    }
+}
+
+/// Enumerate all open webview windows. Returns label, current URL, title and
+/// visibility for each. Test code uses this to discover newly-opened windows
+/// (e.g., a viewer or settings dialog) and pin subsequent commands to them.
+async fn list_windows<R: Runtime>(app: &Arc<AppHandle<R>>) -> Response {
+    let mut infos: Vec<WindowInfo> = Vec::new();
+    for (label, window) in app.webview_windows() {
+        let url = window
+            .url()
+            .map(|u| u.to_string())
+            .unwrap_or_else(|_| String::new());
+        let title = window.title().unwrap_or_default();
+        let visible = window.is_visible().unwrap_or(false);
+        infos.push(WindowInfo { label, url, title, visible });
+    }
+    match serde_json::to_value(&infos) {
+        Ok(v) => Response::ok(v),
+        Err(e) => Response::err(format!("serialize windows: {}", e)),
     }
 }
 
