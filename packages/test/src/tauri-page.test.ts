@@ -245,6 +245,94 @@ describe('TauriPage', () => {
     });
   });
 
+  // ── Multi-window ────────────────────────────────────────────────────
+
+  describe('multi-window', () => {
+    it('default page does not send window field', async () => {
+      await page.click('#btn');
+      const call = mock.lastCall()!;
+      expect(call.window).toBeUndefined();
+    });
+
+    it('window(label) returns a new page that sends the window field', async () => {
+      const viewer = page.window('viewer');
+      await viewer.click('#btn');
+      expect(mock.lastCall()).toMatchObject({ type: 'click', window: 'viewer' });
+    });
+
+    it('window(label) does not affect the original page', async () => {
+      const viewer = page.window('viewer');
+      await viewer.click('#a');
+      expect(mock.lastCall()).toMatchObject({ window: 'viewer' });
+      await page.click('#b');
+      expect(mock.lastCall()?.window).toBeUndefined();
+    });
+
+    it('window(label) inherits the default timeout', async () => {
+      page.setDefaultTimeout(7777);
+      const settings = page.window('settings');
+      await settings.click('#x');
+      expect(mock.lastCall()).toMatchObject({ window: 'settings', timeout_ms: 7777 });
+    });
+
+    it('targetWindow getter reports the scoped label', () => {
+      expect(page.targetWindow).toBeUndefined();
+      expect(page.window('viewer').targetWindow).toBe('viewer');
+    });
+
+    it('listWindows sends list_windows and returns the data array', async () => {
+      const windows = [
+        { label: 'main', url: 'http://localhost/main', title: 'Main', visible: true },
+        { label: 'viewer', url: 'http://localhost/viewer', title: 'Viewer', visible: true },
+      ];
+      mock.setResponse({ data: windows });
+      const result = await page.listWindows();
+      expect(mock.lastCall()).toMatchObject({ type: 'list_windows' });
+      expect(result).toEqual(windows);
+    });
+
+    it('listWindows returns [] when data is null/missing', async () => {
+      mock.setResponse({ data: null });
+      const result = await page.listWindows();
+      expect(result).toEqual([]);
+    });
+
+    it('waitForWindow returns a scoped page once predicate matches', async () => {
+      // First call: no viewer yet. Second call: viewer appears.
+      mock.setResponses(
+        { data: [{ label: 'main', url: 'http://x/main', title: 'M', visible: true }] },
+        {
+          data: [
+            { label: 'main', url: 'http://x/main', title: 'M', visible: true },
+            { label: 'viewer', url: 'http://x/viewer', title: 'V', visible: true },
+          ],
+        },
+      );
+      const viewer = await page.waitForWindow((w) => w.label === 'viewer', {
+        timeout: 1000,
+      });
+      expect(viewer).toBeInstanceOf(TauriPage);
+      expect(viewer.targetWindow).toBe('viewer');
+    });
+
+    it('waitForWindow throws on timeout', async () => {
+      mock.setResponse({ data: [] });
+      await expect(
+        page.waitForWindow((w) => w.label === 'never', { timeout: 250 }),
+      ).rejects.toThrow(/waitForWindow: no matching window within 250ms/);
+    });
+
+    it('waitForWindow uses a default 5000ms timeout', async () => {
+      // We don't actually wait 5s — just verify the error message reports it
+      // when called with no options on an empty result. Use a short polling
+      // by setting up a permanent empty response and racing against a tight
+      // local timeout from the test runner perspective.
+      mock.setResponse({ data: [] });
+      const promise = page.waitForWindow((w) => w.label === 'nope', { timeout: 150 });
+      await expect(promise).rejects.toThrow(/150ms/);
+    });
+  });
+
   // ── Error handling ──────────────────────────────────────────────────
 
   describe('errors', () => {

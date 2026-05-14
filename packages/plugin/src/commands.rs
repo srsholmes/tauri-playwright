@@ -354,3 +354,58 @@ impl Response {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn envelope_parses_legacy_bare_command_without_window() {
+        // Old clients (pre-0.3) send commands with no `window` field.
+        let raw = r##"{"type":"click","selector":"#btn","timeout_ms":1000}"##;
+        let env: CommandEnvelope = serde_json::from_str(raw).expect("parse legacy command");
+        assert!(env.window.is_none());
+        match env.cmd {
+            Command::Click { selector, timeout_ms } => {
+                assert_eq!(selector, "#btn");
+                assert_eq!(timeout_ms, 1000);
+            }
+            _ => panic!("expected Click variant"),
+        }
+    }
+
+    #[test]
+    fn envelope_parses_command_with_window_field() {
+        let raw = r##"{"window":"viewer","type":"click","selector":"#btn"}"##;
+        let env: CommandEnvelope = serde_json::from_str(raw).expect("parse scoped command");
+        assert_eq!(env.window.as_deref(), Some("viewer"));
+        match env.cmd {
+            Command::Click { selector, .. } => assert_eq!(selector, "#btn"),
+            _ => panic!("expected Click variant"),
+        }
+    }
+
+    #[test]
+    fn envelope_parses_list_windows_command() {
+        let raw = r#"{"type":"list_windows"}"#;
+        let env: CommandEnvelope = serde_json::from_str(raw).expect("parse list_windows");
+        assert!(env.window.is_none());
+        assert!(matches!(env.cmd, Command::ListWindows));
+    }
+
+    #[test]
+    fn window_info_serializes_with_expected_field_names() {
+        let info = WindowInfo {
+            label: "viewer".into(),
+            url: "http://x/v".into(),
+            title: "Viewer".into(),
+            visible: true,
+        };
+        let json = serde_json::to_string(&info).unwrap();
+        // Field names must match what the TS client expects.
+        assert!(json.contains(r#""label":"viewer""#));
+        assert!(json.contains(r#""url":"http://x/v""#));
+        assert!(json.contains(r#""title":"Viewer""#));
+        assert!(json.contains(r#""visible":true"#));
+    }
+}
