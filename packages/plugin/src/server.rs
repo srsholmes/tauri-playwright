@@ -486,7 +486,7 @@ async fn execute_command<R: Runtime>(
             take_screenshot(app, pending, window_label, path).await
         }
         Command::NativeScreenshot { path } => {
-            take_native_screenshot(path).await
+            take_native_screenshot(app, window_label, path).await
         }
         Command::StartRecording { path, fps } => {
             let mut rec = recording.lock().await;
@@ -706,8 +706,23 @@ async fn take_screenshot<R: Runtime>(
     Response::err("unexpected screenshot result format".to_string())
 }
 
-/// Native screenshot via platform APIs (CoreGraphics on macOS).
-async fn take_native_screenshot(path: Option<String>) -> Response {
+/// Native screenshot via platform APIs (CoreGraphics on macOS, webkit2gtk on Linux).
+async fn take_native_screenshot<R: Runtime>(
+    app: &Arc<AppHandle<R>>,
+    window_label: &str,
+    path: Option<String>,
+) -> Response {
+    #[cfg(target_os = "linux")]
+    let result = {
+        let app = Arc::clone(app);
+        let wl = window_label.to_string();
+        tokio::task::spawn_blocking(move || {
+            crate::native_capture::platform::screenshot(&app, &wl)
+        })
+        .await
+    };
+
+    #[cfg(not(target_os = "linux"))]
     let result = tokio::task::spawn_blocking(|| {
         crate::native_capture::platform::screenshot()
     })

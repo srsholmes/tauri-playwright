@@ -283,9 +283,77 @@ pub mod platform {
     }
 }
 
-// ── Fallback for non-macOS ──────────────────────────────────────────────────
+// ── Linux implementation via webkit2gtk::WebView::snapshot() ───────────────
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(target_os = "linux")]
+pub mod platform {
+    use std::sync::mpsc;
+    use std::time::Duration;
+
+    pub fn screenshot<R: tauri::Runtime>(
+        app: &tauri::AppHandle<R>,
+        window_label: &str,
+    ) -> Result<Vec<u8>, String> {
+        use tauri::Manager;
+
+        let window = app
+            .get_webview_window(window_label)
+            .ok_or_else(|| format!("window '{}' not found", window_label))?;
+
+        let (tx, rx) = mpsc::channel::<Result<Vec<u8>, String>>();
+
+        window
+            .with_webview(move |webview| {
+                use gtk::prelude::WidgetExt;
+                use webkit2gtk::{SnapshotOptions, SnapshotRegion, WebViewExt};
+
+                let gtk_view = webview.inner();
+                let w = gtk_view.allocated_width();
+                let h = gtk_view.allocated_height();
+
+                gtk_view.snapshot(
+                    SnapshotRegion::Visible,
+                    SnapshotOptions::NONE,
+                    gio::Cancellable::NONE,
+                    move |result| {
+                        let bytes = result.map_err(|e| e.to_string()).and_then(|surface| {
+                            let img =
+                                cairo::ImageSurface::create(cairo::Format::ARgb32, w, h)
+                                    .map_err(|e| format!("create surface: {:?}", e))?;
+                            {
+                                let ctx = cairo::Context::new(&*img)
+                                    .map_err(|e| format!("context: {:?}", e))?;
+                                ctx.set_source_surface(&surface, 0.0, 0.0)
+                                    .map_err(|e| format!("set source: {:?}", e))?;
+                                ctx.paint().map_err(|e| format!("paint: {:?}", e))?;
+                            }
+                            let mut buf = Vec::new();
+                            img.write_to_png(&mut buf)
+                                .map_err(|e| format!("PNG encode: {:?}", e))?;
+                            Ok(buf)
+                        });
+                        tx.send(bytes).ok();
+                    },
+                );
+            })
+            .map_err(|e| e.to_string())?;
+
+        rx.recv_timeout(Duration::from_secs(10))
+            .map_err(|_| "screenshot timeout after 10s".to_string())?
+    }
+
+    pub fn find_window_id(_pid: u32) -> Result<u32, String> {
+        Err("video recording not supported on linux".into())
+    }
+
+    pub fn capture_window_png(_window_id: u32) -> Result<Vec<u8>, String> {
+        Err("video recording not supported on linux".into())
+    }
+}
+
+// ── Fallback for other platforms ────────────────────────────────────────────
+
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
 pub mod platform {
     pub fn screenshot() -> Result<Vec<u8>, String> {
         Err("native screenshot not yet supported on this platform".into())
