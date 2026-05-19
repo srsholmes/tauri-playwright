@@ -534,8 +534,13 @@ async fn execute_command<R: Runtime>(
 /// visibility for each. Test code uses this to discover newly-opened windows
 /// (e.g., a viewer or settings dialog) and pin subsequent commands to them.
 async fn list_windows<R: Runtime>(app: &Arc<AppHandle<R>>) -> Response {
+    // Sort by label for deterministic iteration — `webview_windows()` returns a
+    // `HashMap`, so without sorting, callers polling with `waitForWindow` could
+    // get a different match each run when multiple windows match a predicate.
+    let mut entries: Vec<_> = app.webview_windows().into_iter().collect();
+    entries.sort_by(|a, b| a.0.cmp(&b.0));
     let mut infos: Vec<WindowInfo> = Vec::new();
-    for (label, window) in app.webview_windows() {
+    for (label, window) in entries {
         let url = window
             .url()
             .map(|u| u.to_string())

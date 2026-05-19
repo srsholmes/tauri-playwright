@@ -394,6 +394,18 @@ mod tests {
     }
 
     #[test]
+    fn envelope_rejects_unknown_command_type() {
+        // Lock in the error wording for unknown variants — guards against a
+        // future `#[serde(flatten)]` regression silently swallowing typos.
+        let raw = r#"{"window":"v","type":"definitely_not_a_command"}"#;
+        let err = serde_json::from_str::<CommandEnvelope>(raw).unwrap_err();
+        assert!(
+            err.to_string().contains("unknown variant"),
+            "expected `unknown variant` in error, got: {err}"
+        );
+    }
+
+    #[test]
     fn window_info_serializes_with_expected_field_names() {
         let info = WindowInfo {
             label: "viewer".into(),
