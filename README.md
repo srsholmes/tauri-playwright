@@ -468,8 +468,18 @@ const windows = await tauriPage.listWindows();
 ```
 
 `page.window(label)` shares the same underlying socket — no new connection is
-opened. `waitForWindow()` polls every 100 ms and accepts an optional
-`{ timeout }` (default 5000 ms).
+opened. `waitForWindow()` polls every 50 ms and accepts an optional
+`{ timeout }` (default 5000 ms). It fails fast if the plugin reports
+`invalid command` so a version mismatch surfaces immediately instead of waiting
+out the full timeout.
+
+> **Heads-up: capability scope.** Tauri's capability config gates `pw_result`
+> (the IPC the plugin uses to return values) per window. If your
+> `src-tauri/capabilities/*.json` lists `"windows": ["main"]`, any command sent
+> to a second window will ACL-reject and the `eval` round-trip will hang up to
+> 30 s before timing out. Widen the capability to cover every label you want to
+> drive — for example `"windows": ["main", "*"]`, or an explicit list like
+> `["main", "viewer-*", "settings"]`.
 
 ## Plugin Configuration
 
