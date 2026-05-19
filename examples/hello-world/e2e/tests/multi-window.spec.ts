@@ -1,7 +1,9 @@
 import { test, expect } from '../fixtures';
 
 test.describe('Multi-window', () => {
-  test.skip(({}, testInfo) => testInfo.project.name !== 'tauri', 'Real WebviewWindow requires Tauri runtime');
+  test.beforeEach(({}, testInfo) => {
+    test.skip(testInfo.project.name !== 'tauri', 'Real WebviewWindow requires Tauri runtime');
+  });
 
   test('opens a viewer window and drives it via waitForWindow', async ({ tauriPage }) => {
     await tauriPage.click('[data-testid="btn-open-viewer"]');
