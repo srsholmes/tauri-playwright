@@ -551,10 +551,14 @@ export class TauriPage {
   }
 
   /**
-   * Poll `listWindows()` every 100 ms until a window matches `predicate`.
+   * Poll `listWindows()` every 50 ms until a window matches `predicate`.
    * Returns a new `TauriPage` scoped to that window.
    *
-   * @throws on timeout (default 5000 ms).
+   * Fails fast (without waiting out the timeout) if the plugin reports
+   * `invalid command` — that means the running plugin predates `list_windows`
+   * (added in 0.3.0) and no amount of polling will fix it.
+   *
+   * @throws on timeout (default 5000 ms) or plugin version mismatch.
    */
   async waitForWindow(
     predicate: (w: WindowInfo) => boolean,
@@ -569,9 +573,14 @@ export class TauriPage {
         const match = windows.find(predicate);
         if (match) return this.window(match.label);
       } catch (err) {
+        if (String(err).includes('invalid command')) {
+          throw new Error(
+            `waitForWindow: plugin does not support list_windows — upgrade tauri-plugin-playwright to >=0.3.0 (${String(err)})`,
+          );
+        }
         lastError = err;
       }
-      await new Promise((r) => setTimeout(r, 100));
+      await new Promise((r) => setTimeout(r, 50));
     }
     const suffix = lastError ? ` (last error: ${String(lastError)})` : '';
     throw new Error(`waitForWindow: no matching window within ${timeout}ms${suffix}`);
