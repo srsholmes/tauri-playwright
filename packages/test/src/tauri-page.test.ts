@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { TauriPage, TauriLocator, TauriKeyboard, TauriMouse } from './tauri-page.js';
 import { createMockClient } from './test-helpers.js';
 
@@ -330,6 +330,39 @@ describe('TauriPage', () => {
       mock.setResponse({ data: [] });
       const promise = page.waitForWindow((w) => w.label === 'nope', { timeout: 150 });
       await expect(promise).rejects.toThrow(/150ms/);
+    });
+
+    it('waitForWindow fails fast on `invalid command` with a version-mismatch hint', async () => {
+      // Simulate an older plugin (pre-0.3.0) that doesn't know `list_windows`.
+      // The server replies `{ok: false, error: "invalid command: ..."}` and
+      // the wrapper rethrows. waitForWindow should bail immediately instead
+      // of burning the full timeout.
+      mock.setError('invalid command: unknown variant `list_windows`');
+      const start = Date.now();
+      await expect(
+        page.waitForWindow((w) => w.label === 'never', { timeout: 5000 }),
+      ).rejects.toThrow(
+        /plugin does not support list_windows — upgrade tauri-plugin-playwright to >=0.3\.0/,
+      );
+      // Sanity: bailed in well under the timeout (not waiting full 5s).
+      expect(Date.now() - start).toBeLessThan(500);
+    });
+
+    it('waitForWindow fails fast on connection errors', async () => {
+      // Simulate the socket being unreachable — `client.send` rejects directly
+      // (no `{ok: false}` envelope). waitForWindow should still bail.
+      const sendSpy = vi
+        .spyOn((mock as unknown as { client: { send: () => Promise<unknown> } }).client, 'send')
+        .mockRejectedValue(new Error('connect ECONNREFUSED /tmp/tauri-playwright.sock'));
+      try {
+        const start = Date.now();
+        await expect(
+          page.waitForWindow((w) => w.label === 'never', { timeout: 5000 }),
+        ).rejects.toThrow(/list_windows failed — .*ECONNREFUSED/);
+        expect(Date.now() - start).toBeLessThan(500);
+      } finally {
+        sendSpy.mockRestore();
+      }
     });
   });
 

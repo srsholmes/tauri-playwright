@@ -554,11 +554,12 @@ export class TauriPage {
    * Poll `listWindows()` every 50 ms until a window matches `predicate`.
    * Returns a new `TauriPage` scoped to that window.
    *
-   * Fails fast (without waiting out the timeout) if the plugin reports
-   * `invalid command` — that means the running plugin predates `list_windows`
-   * (added in 0.3.0) and no amount of polling will fix it.
+   * Any error from `listWindows` (`invalid command`, dropped socket, bad JSON)
+   * is fatal — no amount of polling will fix it, so we surface it immediately
+   * instead of waiting out the timeout. `invalid command` gets an extra hint
+   * about the plugin version since that's the most common cause.
    *
-   * @throws on timeout (default 5000 ms) or plugin version mismatch.
+   * @throws on timeout (default 5000 ms) or any `listWindows` failure.
    */
   async waitForWindow(
     predicate: (w: WindowInfo) => boolean,
@@ -566,24 +567,24 @@ export class TauriPage {
   ): Promise<TauriPage> {
     const timeout = options?.timeout ?? 5000;
     const deadline = Date.now() + timeout;
-    let lastError: unknown;
     while (Date.now() < deadline) {
+      let windows: WindowInfo[];
       try {
-        const windows = await this.listWindows();
-        const match = windows.find(predicate);
-        if (match) return this.window(match.label);
+        windows = await this.listWindows();
       } catch (err) {
-        if (String(err).includes('invalid command')) {
+        const msg = String(err);
+        if (msg.includes('invalid command')) {
           throw new Error(
-            `waitForWindow: plugin does not support list_windows — upgrade tauri-plugin-playwright to >=0.3.0 (${String(err)})`,
+            `waitForWindow: plugin does not support list_windows — upgrade tauri-plugin-playwright to >=0.3.0 (${msg})`,
           );
         }
-        lastError = err;
+        throw new Error(`waitForWindow: list_windows failed — ${msg}`);
       }
+      const match = windows.find(predicate);
+      if (match) return this.window(match.label);
       await new Promise((r) => setTimeout(r, 50));
     }
-    const suffix = lastError ? ` (last error: ${String(lastError)})` : '';
-    throw new Error(`waitForWindow: no matching window within ${timeout}ms${suffix}`);
+    throw new Error(`waitForWindow: no matching window within ${timeout}ms`);
   }
 }
 

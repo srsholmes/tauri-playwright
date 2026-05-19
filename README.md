@@ -469,9 +469,10 @@ const windows = await tauriPage.listWindows();
 
 `page.window(label)` shares the same underlying socket — no new connection is
 opened. `waitForWindow()` polls every 50 ms and accepts an optional
-`{ timeout }` (default 5000 ms). It fails fast if the plugin reports
-`invalid command` so a version mismatch surfaces immediately instead of waiting
-out the full timeout.
+`{ timeout }` (default 5000 ms). Any `listWindows` error is treated as fatal
+and surfaced immediately rather than swallowed by the polling loop —
+`invalid command` (plugin version mismatch) gets a clearer hint, but socket
+errors, malformed responses, etc. all bail just as fast.
 
 > **Heads-up: capability scope.** Tauri's capability config gates `pw_result`
 > (the IPC the plugin uses to return values) per window. If your
