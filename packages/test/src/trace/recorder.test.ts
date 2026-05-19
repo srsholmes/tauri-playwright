@@ -69,7 +69,24 @@ describe('TraceRecorder', () => {
       expect(types).toContain('after');
 
       const beforeEvent = lines.find((e: { type: string; method?: string }) => e.type === 'before');
-      expect(beforeEvent).toMatchObject({ method: 'click', params: { selector: '#btn' } });
+      expect(beforeEvent).toMatchObject({
+        method: 'click',
+        class: 'Page',
+        params: { selector: '#btn' },
+      });
+      // v8 trace schema requires stepId on every action so the test list
+      // panel can group sub-steps; modernizer falls back to callId otherwise.
+      expect(beforeEvent).toHaveProperty('stepId');
+      expect((beforeEvent as { stepId: string }).stepId).toBe(
+        (beforeEvent as { callId: string }).callId,
+      );
+
+      // Version must come from the installed @playwright/test, not the
+      // hardcoded fallback. Assert it looks like a real semver.
+      expect(lines[0]).toMatchObject({ type: 'context-options' });
+      expect((lines[0] as { playwrightVersion: string }).playwrightVersion).toMatch(
+        /^\d+\.\d+\.\d+/,
+      );
 
       // Resource entry exists for the captured frame
       expect(before).not.toBeNull();
@@ -103,5 +120,35 @@ describe('TraceRecorder', () => {
     const rec = new TraceRecorder();
     const sha = await rec.captureFrame(async () => TINY_PNG);
     expect(sha).toBeNull();
+  });
+
+  it('classifies context-shaped commands as BrowserContext, not Page', async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'tauri-trace-test-'));
+    try {
+      const rec = new TraceRecorder();
+      rec.start(dir);
+      rec.recordAction({
+        method: 'listWindows',
+        params: {},
+        response: { ok: true, data: [] },
+        startTime: 0,
+        endTime: 1,
+        beforeSha: null,
+        afterSha: null,
+      });
+      const stop = await rec.stop();
+      expect(stop.ok).toBe(true);
+
+      const zip = readFileSync(path.join(dir, 'trace.zip'));
+      const entries = unzipSync(zip);
+      const lines = strFromU8(entries['test.trace'])
+        .trim()
+        .split('\n')
+        .map((l) => JSON.parse(l));
+      const before = lines.find((e: { type: string }) => e.type === 'before');
+      expect(before).toMatchObject({ method: 'listWindows', class: 'BrowserContext' });
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
