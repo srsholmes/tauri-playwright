@@ -1,5 +1,6 @@
 //! Native screen capture using platform APIs.
 //! macOS: CoreGraphics CGWindowListCreateImage
+//! Linux: webkit2gtk WebView::snapshot()
 //! Other platforms: not yet supported.
 
 /// Encode bytes to base64 (no external dependency).
@@ -272,7 +273,14 @@ pub mod platform {
     }
 
     /// Take a native screenshot of our process's main window.
-    pub fn screenshot() -> Result<Vec<u8>, String> {
+    ///
+    /// `app`/`window_label` are accepted for signature parity with the Linux
+    /// path (which needs them to reach the right webview); the macOS
+    /// CoreGraphics path captures by process id and ignores them for now.
+    pub fn screenshot<R: tauri::Runtime>(
+        _app: &tauri::AppHandle<R>,
+        _window_label: &str,
+    ) -> Result<Vec<u8>, String> {
         let pid = std::process::id();
         let window_id = find_window_id(pid)?;
         eprintln!(
@@ -304,12 +312,9 @@ pub mod platform {
 
         window
             .with_webview(move |webview| {
-                use gtk::prelude::WidgetExt;
                 use webkit2gtk::{SnapshotOptions, SnapshotRegion, WebViewExt};
 
                 let gtk_view = webview.inner();
-                let w = gtk_view.allocated_width();
-                let h = gtk_view.allocated_height();
 
                 gtk_view.snapshot(
                     SnapshotRegion::Visible,
@@ -317,16 +322,12 @@ pub mod platform {
                     gio::Cancellable::NONE,
                     move |result| {
                         let bytes = result.map_err(|e| e.to_string()).and_then(|surface| {
-                            let img =
-                                cairo::ImageSurface::create(cairo::Format::ARgb32, w, h)
-                                    .map_err(|e| format!("create surface: {:?}", e))?;
-                            {
-                                let ctx = cairo::Context::new(&*img)
-                                    .map_err(|e| format!("context: {:?}", e))?;
-                                ctx.set_source_surface(&surface, 0.0, 0.0)
-                                    .map_err(|e| format!("set source: {:?}", e))?;
-                                ctx.paint().map_err(|e| format!("paint: {:?}", e))?;
-                            }
+                            // The snapshot surface is already an image surface sized
+                            // in *device* pixels, so encode it directly. This avoids
+                            // recopying through a logical-pixel-sized surface, which
+                            // would clip to the top-left quarter on a HiDPI display.
+                            let img = cairo::ImageSurface::try_from(surface)
+                                .map_err(|_| "snapshot surface was not an ImageSurface".to_string())?;
                             let mut buf = Vec::new();
                             img.write_to_png(&mut buf)
                                 .map_err(|e| format!("PNG encode: {:?}", e))?;
@@ -341,30 +342,17 @@ pub mod platform {
         rx.recv_timeout(Duration::from_secs(10))
             .map_err(|_| "screenshot timeout after 10s".to_string())?
     }
-
-    pub fn find_window_id(_pid: u32) -> Result<u32, String> {
-        Err("video recording not supported on linux".into())
-    }
-
-    pub fn capture_window_png(_window_id: u32) -> Result<Vec<u8>, String> {
-        Err("video recording not supported on linux".into())
-    }
 }
 
 // ── Fallback for other platforms ────────────────────────────────────────────
 
 #[cfg(not(any(target_os = "macos", target_os = "linux")))]
 pub mod platform {
-    pub fn screenshot() -> Result<Vec<u8>, String> {
+    pub fn screenshot<R: tauri::Runtime>(
+        _app: &tauri::AppHandle<R>,
+        _window_label: &str,
+    ) -> Result<Vec<u8>, String> {
         Err("native screenshot not yet supported on this platform".into())
-    }
-
-    pub fn find_window_id(_pid: u32) -> Result<u32, String> {
-        Err("not supported on this platform".into())
-    }
-
-    pub fn capture_window_png(_window_id: u32) -> Result<Vec<u8>, String> {
-        Err("not supported on this platform".into())
     }
 }
 
@@ -383,6 +371,12 @@ pub struct RecordingSession {
 
 impl RecordingSession {
     /// Start capturing frames to `output_dir` at the given FPS.
+    ///
+    /// macOS only: frame capture goes through the CoreGraphics
+    /// `find_window_id`/`capture_window_png` path. On other platforms
+    /// `Command::StartRecording` is rejected at the server level before
+    /// reaching here, so no constructor is provided.
+    #[cfg(target_os = "macos")]
     pub fn start(output_dir: String, fps: u32) -> Result<Self, String> {
         let pid = std::process::id();
         let window_id = platform::find_window_id(pid)?;
