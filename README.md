@@ -445,8 +445,11 @@ Discover a newly-opened window and scope a `TauriPage` to it:
 test('viewer opens and shows the file', async ({ tauriPage }) => {
   await tauriPage.click('[data-testid="btn-open-viewer"]');
 
-  // Poll until a window whose URL ends with /viewer appears (default 5s timeout).
-  const viewer = await tauriPage.waitForWindow((w) => w.url.endsWith('/viewer'));
+  // Poll until a window matching the predicate appears (default 5s timeout).
+  // Match on whatever is stable for your app — here, the label prefix the app
+  // assigns when it opens the window (e.g. `viewer-<timestamp>`). You can also
+  // match on `w.url` or `w.title`.
+  const viewer = await tauriPage.waitForWindow((w) => w.label.startsWith('viewer-'));
 
   // From here, every command on `viewer` targets that window. The original
   // `tauriPage` still drives the main window.

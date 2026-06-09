@@ -597,7 +597,14 @@ async fn eval_js<R: Runtime>(
             attempts += 1;
             if attempts >= 20 {
                 pending.lock().await.remove(&id);
-                return Response::err(format!("window '{}' not found after retries", window_label));
+                let mut available: Vec<String> =
+                    app.webview_windows().keys().cloned().collect();
+                available.sort();
+                return Response::err(format!(
+                    "window '{}' not found after retries (available windows: [{}])",
+                    window_label,
+                    available.join(", ")
+                ));
             }
             tokio::time::sleep(std::time::Duration::from_millis(100)).await;
         }

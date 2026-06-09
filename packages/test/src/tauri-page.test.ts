@@ -322,14 +322,27 @@ describe('TauriPage', () => {
       ).rejects.toThrow(/waitForWindow: no matching window within 250ms/);
     });
 
-    it('waitForWindow uses a default 5000ms timeout', async () => {
-      // We don't actually wait 5s — just verify the error message reports it
-      // when called with no options on an empty result. Use a short polling
-      // by setting up a permanent empty response and racing against a tight
-      // local timeout from the test runner perspective.
+    it('waitForWindow reports the configured timeout in its error message', async () => {
+      // No window ever matches, so it rejects once the (short) timeout elapses.
+      // Verifies the explicit timeout is surfaced in the error.
       mock.setResponse({ data: [] });
       const promise = page.waitForWindow((w) => w.label === 'nope', { timeout: 150 });
       await expect(promise).rejects.toThrow(/150ms/);
+    });
+
+    it('waitForWindow defaults to a 5000ms timeout when no option is given', async () => {
+      // Drive the polling loop with fake timers so we exercise the real default
+      // without waiting 5s of wall-clock time.
+      vi.useFakeTimers();
+      try {
+        mock.setResponse({ data: [] }); // never matches
+        const promise = page.waitForWindow((w) => w.label === 'nope');
+        const assertion = expect(promise).rejects.toThrow(/within 5000ms/);
+        await vi.advanceTimersByTimeAsync(5000);
+        await assertion;
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     it('waitForWindow fails fast on `invalid command` with a version-mismatch hint', async () => {
