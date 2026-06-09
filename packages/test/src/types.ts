@@ -90,3 +90,18 @@ export interface CapturedInvoke {
   args: Record<string, unknown>;
   timestamp: number;
 }
+
+/**
+ * Information about a single open webview window, returned by
+ * `TauriPage.listWindows()` / `TauriPage.waitForWindow()`.
+ */
+export interface WindowInfo {
+  /** The window's Tauri label — pass to `page.window(label)` to scope commands. */
+  label: string;
+  /** The URL currently loaded in the window's webview. */
+  url: string;
+  /** The window's title bar text. */
+  title: string;
+  /** Whether the window is currently visible (not minimised or hidden). */
+  visible: boolean;
+}

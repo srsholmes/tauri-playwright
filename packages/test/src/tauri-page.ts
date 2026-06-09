@@ -1,5 +1,6 @@
 import { Buffer } from 'node:buffer';
 import { PluginClient, type PluginResponse } from './socket-client.js';
+import type { WindowInfo } from './types.js';
 
 /**
  * A Playwright-like Page API backed by the tauri-plugin-playwright socket bridge.
@@ -7,10 +8,23 @@ import { PluginClient, type PluginResponse } from './socket-client.js';
  */
 export type TimeoutOption = { timeout?: number };
 
+/** Options for `TauriPage.waitForWindow()`. */
+export type WaitForWindowOption = { timeout?: number };
+
 export class TauriPage {
   private _defaultTimeout = 5000;
 
-  constructor(private client: PluginClient) {}
+  /**
+   * @param client Shared socket client. When forking via `.window(label)`,
+   *               the new page reuses this same client (no new connection).
+   * @param defaultWindow Optional webview window label. When set, every
+   *                      command sent through this page targets that window;
+   *                      otherwise the plugin's configured default applies.
+   */
+  constructor(
+    private client: PluginClient,
+    private defaultWindow?: string,
+  ) {}
 
   /** Set the default timeout for all auto-waiting operations (ms). */
   setDefaultTimeout(timeout: number): void {
@@ -502,11 +516,75 @@ export class TauriPage {
 
   /** Send a command to the plugin and handle errors. */
   private async command(type: string, params: Record<string, unknown>): Promise<PluginResponse> {
-    const resp = await this.client.send({ type, ...params });
+    const payload: Record<string, unknown> = { type, ...params };
+    if (this.defaultWindow !== undefined) {
+      payload.window = this.defaultWindow;
+    }
+    const resp = await this.client.send(payload);
     if (!resp.ok) {
       throw new Error(`TauriPage command '${type}' failed: ${resp.error}`);
     }
     return resp;
+  }
+
+  // ── Multi-window ────────────────────────────────────────────────────────
+
+  /**
+   * Return a new `TauriPage` that targets `label` for every command.
+   * Shares the same underlying socket — no new connection is opened.
+   */
+  window(label: string): TauriPage {
+    const scoped = new TauriPage(this.client, label);
+    scoped._defaultTimeout = this._defaultTimeout;
+    return scoped;
+  }
+
+  /** The webview window label this page targets, if any. */
+  get targetWindow(): string | undefined {
+    return this.defaultWindow;
+  }
+
+  /** List all open webview windows. */
+  async listWindows(): Promise<WindowInfo[]> {
+    const resp = await this.command('list_windows', {});
+    return (resp.data ?? []) as WindowInfo[];
+  }
+
+  /**
+   * Poll `listWindows()` every 50 ms until a window matches `predicate`.
+   * Returns a new `TauriPage` scoped to that window.
+   *
+   * Any error from `listWindows` (`invalid command`, dropped socket, bad JSON)
+   * is fatal — no amount of polling will fix it, so we surface it immediately
+   * instead of waiting out the timeout. `invalid command` gets an extra hint
+   * about the plugin version since that's the most common cause.
+   *
+   * @throws on timeout (default 5000 ms) or any `listWindows` failure.
+   */
+  async waitForWindow(
+    predicate: (w: WindowInfo) => boolean,
+    options?: WaitForWindowOption,
+  ): Promise<TauriPage> {
+    const timeout = options?.timeout ?? 5000;
+    const deadline = Date.now() + timeout;
+    while (Date.now() < deadline) {
+      let windows: WindowInfo[];
+      try {
+        windows = await this.listWindows();
+      } catch (err) {
+        const msg = String(err);
+        if (msg.includes('invalid command')) {
+          throw new Error(
+            `waitForWindow: plugin does not support list_windows — upgrade tauri-plugin-playwright to >=0.3.0 (${msg})`,
+          );
+        }
+        throw new Error(`waitForWindow: list_windows failed — ${msg}`);
+      }
+      const match = windows.find(predicate);
+      if (match) return this.window(match.label);
+      await new Promise((r) => setTimeout(r, 50));
+    }
+    throw new Error(`waitForWindow: no matching window within ${timeout}ms`);
   }
 }
 
