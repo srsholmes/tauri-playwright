@@ -21,6 +21,19 @@ jobs:
       - run: pnpm --filter @srsholmes/tauri-playwright build
       - run: pnpm --filter @srsholmes/tauri-playwright test
 
+  linux-check:
+    name: Plugin Build (Linux)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install Linux deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev \
+            libayatana-appindicator3-dev librsvg2-dev libxdo-dev libssl-dev
+      - run: cargo check --manifest-path packages/plugin/Cargo.toml
+
   browser-tests:
     name: Browser-Only E2E (Headless)
     runs-on: ubuntu-latest

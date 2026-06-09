@@ -489,20 +489,30 @@ async fn execute_command<R: Runtime>(
             take_screenshot(app, pending, window_label, path).await
         }
         Command::NativeScreenshot { path } => {
-            take_native_screenshot(path).await
+            take_native_screenshot(app, window_label, path).await
         }
         Command::StartRecording { path, fps } => {
-            let mut rec = recording.lock().await;
-            if rec.is_some() {
-                return Response::err("recording already in progress");
+            #[cfg(not(target_os = "macos"))]
+            {
+                let _ = (path, fps, recording);
+                Response::err(
+                    "video recording is not supported on this platform yet (macOS only)",
+                )
             }
-            match RecordingSession::start(path, fps) {
-                Ok(session) => {
-                    let dir = session.output_dir.clone();
-                    *rec = Some(session);
-                    Response::ok(serde_json::json!({ "dir": dir, "fps": fps }))
+            #[cfg(target_os = "macos")]
+            {
+                let mut rec = recording.lock().await;
+                if rec.is_some() {
+                    return Response::err("recording already in progress");
                 }
-                Err(e) => Response::err(e),
+                match RecordingSession::start(path, fps) {
+                    Ok(session) => {
+                        let dir = session.output_dir.clone();
+                        *rec = Some(session);
+                        Response::ok(serde_json::json!({ "dir": dir, "fps": fps }))
+                    }
+                    Err(e) => Response::err(e),
+                }
             }
         }
         Command::StopRecording => {
@@ -742,10 +752,16 @@ async fn take_screenshot<R: Runtime>(
     Response::err("unexpected screenshot result format".to_string())
 }
 
-/// Native screenshot via platform APIs (CoreGraphics on macOS).
-async fn take_native_screenshot(path: Option<String>) -> Response {
-    let result = tokio::task::spawn_blocking(|| {
-        crate::native_capture::platform::screenshot()
+/// Native screenshot via platform APIs (CoreGraphics on macOS, webkit2gtk on Linux).
+async fn take_native_screenshot<R: Runtime>(
+    app: &Arc<AppHandle<R>>,
+    window_label: &str,
+    path: Option<String>,
+) -> Response {
+    let app = Arc::clone(app);
+    let wl = window_label.to_string();
+    let result = tokio::task::spawn_blocking(move || {
+        crate::native_capture::platform::screenshot(&app, &wl)
     })
     .await;
 

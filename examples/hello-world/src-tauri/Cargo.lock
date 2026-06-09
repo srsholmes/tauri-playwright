@@ -3777,14 +3777,19 @@ dependencies = [
 
 [[package]]
 name = "tauri-plugin-playwright"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
+ "cairo-rs",
+ "gio",
+ "glib",
+ "gtk",
  "log",
  "serde",
  "serde_json",
  "tauri",
  "tauri-plugin",
  "tokio",
+ "webkit2gtk",
 ]
 
 [[package]]
