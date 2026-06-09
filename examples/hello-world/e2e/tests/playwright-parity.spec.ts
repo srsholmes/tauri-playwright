@@ -33,7 +33,7 @@ test.describe('Playwright Parity', () => {
   });
 
   test('expect(locator).toHaveCount', async ({ tauriPage }) => {
-    await expect(tauriPage.locator('section')).toHaveCount(9); // counter, greet, todo, delayed, api, upload, dialog, drag, modal
+    await expect(tauriPage.locator('section')).toHaveCount(10); // counter, greet, todo, delayed, api, upload, dialog, drag, modal, viewer
     await expect(tauriPage.locator('[data-testid="does-not-exist"]')).toHaveCount(0);
   });
 

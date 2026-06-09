@@ -1,7 +1,17 @@
 import { useState } from 'react';
 import { api } from './lib/tauri';
+import { ViewerWindow } from './ViewerWindow';
+
+const isViewer = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('window') === 'viewer';
 
 export default function App() {
+  if (isViewer) {
+    return <ViewerWindow />;
+  }
+  return <MainApp />;
+}
+
+function MainApp() {
   const [count, setCount] = useState(0);
   const [name, setName] = useState('');
   const [greeting, setGreeting] = useState('');
@@ -300,6 +310,29 @@ export default function App() {
         <button data-testid="btn-open-modal" onClick={() => setShowModal(true)}>
           Open Modal
         </button>
+      </section>
+
+      {/* Multi-window Section */}
+      <section data-testid="viewer-section" style={{ marginTop: 32 }}>
+        <h2>Viewer (second window)</h2>
+        <button
+          data-testid="btn-open-viewer"
+          onClick={async () => {
+            const { WebviewWindow } = await import('@tauri-apps/api/webviewWindow');
+            const label = `viewer-${Date.now()}`;
+            new WebviewWindow(label, {
+              url: '?window=viewer',
+              title: 'Viewer',
+              width: 400,
+              height: 300,
+            });
+          }}
+        >
+          Open Viewer Window
+        </button>
+        <p style={{ marginTop: 8, color: '#888', fontSize: 13 }}>
+          Opens a second WebviewWindow with label <code>viewer-&lt;timestamp&gt;</code>. Only works under Tauri.
+        </p>
       </section>
 
       {showModal && (

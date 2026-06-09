@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { TauriPage, TauriLocator, TauriKeyboard, TauriMouse } from './tauri-page.js';
 import { createMockClient } from './test-helpers.js';
 
@@ -242,6 +242,140 @@ describe('TauriPage', () => {
       page.setDefaultTimeout(10000);
       await page.click('#btn', { timeout: 500 });
       expect(mock.lastCall()).toMatchObject({ timeout_ms: 500 });
+    });
+  });
+
+  // ── Multi-window ────────────────────────────────────────────────────
+
+  describe('multi-window', () => {
+    it('default page does not send window field', async () => {
+      await page.click('#btn');
+      const call = mock.lastCall()!;
+      expect(call.window).toBeUndefined();
+    });
+
+    it('window(label) returns a new page that sends the window field', async () => {
+      const viewer = page.window('viewer');
+      await viewer.click('#btn');
+      expect(mock.lastCall()).toMatchObject({ type: 'click', window: 'viewer' });
+    });
+
+    it('window(label) does not affect the original page', async () => {
+      const viewer = page.window('viewer');
+      await viewer.click('#a');
+      expect(mock.lastCall()).toMatchObject({ window: 'viewer' });
+      await page.click('#b');
+      expect(mock.lastCall()?.window).toBeUndefined();
+    });
+
+    it('window(label) inherits the default timeout', async () => {
+      page.setDefaultTimeout(7777);
+      const settings = page.window('settings');
+      await settings.click('#x');
+      expect(mock.lastCall()).toMatchObject({ window: 'settings', timeout_ms: 7777 });
+    });
+
+    it('targetWindow getter reports the scoped label', () => {
+      expect(page.targetWindow).toBeUndefined();
+      expect(page.window('viewer').targetWindow).toBe('viewer');
+    });
+
+    it('listWindows sends list_windows and returns the data array', async () => {
+      const windows = [
+        { label: 'main', url: 'http://localhost/main', title: 'Main', visible: true },
+        { label: 'viewer', url: 'http://localhost/viewer', title: 'Viewer', visible: true },
+      ];
+      mock.setResponse({ data: windows });
+      const result = await page.listWindows();
+      expect(mock.lastCall()).toMatchObject({ type: 'list_windows' });
+      expect(result).toEqual(windows);
+    });
+
+    it('listWindows returns [] when data is null/missing', async () => {
+      mock.setResponse({ data: null });
+      const result = await page.listWindows();
+      expect(result).toEqual([]);
+    });
+
+    it('waitForWindow returns a scoped page once predicate matches', async () => {
+      // First call: no viewer yet. Second call: viewer appears.
+      mock.setResponses(
+        { data: [{ label: 'main', url: 'http://x/main', title: 'M', visible: true }] },
+        {
+          data: [
+            { label: 'main', url: 'http://x/main', title: 'M', visible: true },
+            { label: 'viewer', url: 'http://x/viewer', title: 'V', visible: true },
+          ],
+        },
+      );
+      const viewer = await page.waitForWindow((w) => w.label === 'viewer', {
+        timeout: 1000,
+      });
+      expect(viewer).toBeInstanceOf(TauriPage);
+      expect(viewer.targetWindow).toBe('viewer');
+    });
+
+    it('waitForWindow throws on timeout', async () => {
+      mock.setResponse({ data: [] });
+      await expect(
+        page.waitForWindow((w) => w.label === 'never', { timeout: 250 }),
+      ).rejects.toThrow(/waitForWindow: no matching window within 250ms/);
+    });
+
+    it('waitForWindow reports the configured timeout in its error message', async () => {
+      // No window ever matches, so it rejects once the (short) timeout elapses.
+      // Verifies the explicit timeout is surfaced in the error.
+      mock.setResponse({ data: [] });
+      const promise = page.waitForWindow((w) => w.label === 'nope', { timeout: 150 });
+      await expect(promise).rejects.toThrow(/150ms/);
+    });
+
+    it('waitForWindow defaults to a 5000ms timeout when no option is given', async () => {
+      // Drive the polling loop with fake timers so we exercise the real default
+      // without waiting 5s of wall-clock time.
+      vi.useFakeTimers();
+      try {
+        mock.setResponse({ data: [] }); // never matches
+        const promise = page.waitForWindow((w) => w.label === 'nope');
+        const assertion = expect(promise).rejects.toThrow(/within 5000ms/);
+        await vi.advanceTimersByTimeAsync(5000);
+        await assertion;
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('waitForWindow fails fast on `invalid command` with a version-mismatch hint', async () => {
+      // Simulate an older plugin (pre-0.3.0) that doesn't know `list_windows`.
+      // The server replies `{ok: false, error: "invalid command: ..."}` and
+      // the wrapper rethrows. waitForWindow should bail immediately instead
+      // of burning the full timeout.
+      mock.setError('invalid command: unknown variant `list_windows`');
+      const start = Date.now();
+      await expect(
+        page.waitForWindow((w) => w.label === 'never', { timeout: 5000 }),
+      ).rejects.toThrow(
+        /plugin does not support list_windows — upgrade tauri-plugin-playwright to >=0.3\.0/,
+      );
+      // Sanity: bailed in well under the timeout (not waiting full 5s).
+      expect(Date.now() - start).toBeLessThan(500);
+    });
+
+    it('waitForWindow fails fast on connection errors', async () => {
+      // Simulate the socket being unreachable — `client.send` rejects directly
+      // (no `{ok: false}` envelope). waitForWindow should still bail.
+      const sendSpy = vi
+        .spyOn((mock as unknown as { client: { send: () => Promise<unknown> } }).client, 'send')
+        .mockRejectedValue(new Error('connect ECONNREFUSED /tmp/tauri-playwright.sock'));
+      try {
+        const start = Date.now();
+        await expect(
+          page.waitForWindow((w) => w.label === 'never', { timeout: 5000 }),
+        ).rejects.toThrow(/list_windows failed — .*ECONNREFUSED/);
+        expect(Date.now() - start).toBeLessThan(500);
+      } finally {
+        sendSpy.mockRestore();
+      }
     });
   });
 

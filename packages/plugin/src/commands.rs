@@ -28,6 +28,26 @@ pub async fn pw_result(
     Ok(())
 }
 
+/// Wire-level envelope for incoming commands.
+///
+/// The optional `window` field selects which webview window the command targets.
+/// When omitted, the server falls back to the plugin's configured default window
+/// label. Existing clients that send a bare `Command` (no `window` field) still
+/// parse cleanly thanks to `#[serde(flatten)]` + `Option<String>`, so this
+/// wrapper is fully backward compatible with the pre-0.3 wire protocol.
+#[derive(Debug, Deserialize)]
+pub struct CommandEnvelope {
+    /// Webview window label to target. Falls back to the plugin's default when `None`.
+    #[serde(default)]
+    pub window: Option<String>,
+
+    /// The actual command. Flattened so the discriminator (`type`) and the
+    /// command's own fields sit at the top level of the JSON object — matching
+    /// the legacy wire format.
+    #[serde(flatten)]
+    pub cmd: Command,
+}
+
 /// A command sent from the Playwright test runner to the plugin.
 /// Protocol: newline-delimited JSON over Unix socket or TCP.
 #[derive(Debug, Deserialize)]
@@ -268,6 +288,13 @@ pub enum Command {
         fps: u32,
     },
     StopRecording,
+
+    // ── Multi-window ──────────────────────────────────────────────────
+
+    /// List all open webview windows. Used by tests to discover newly-opened
+    /// windows (e.g., a viewer, a settings dialog) and scope subsequent
+    /// commands to them via the envelope's `window` field.
+    ListWindows,
 }
 
 fn default_timeout() -> u64 {
@@ -285,6 +312,19 @@ pub struct FilePayload {
     pub mime_type: String,
     /// Base64-encoded file content.
     pub base64: String,
+}
+
+/// Information about a single webview window, returned by `ListWindows`.
+#[derive(Debug, Serialize)]
+pub struct WindowInfo {
+    /// The window's Tauri label (passed to the envelope's `window` field).
+    pub label: String,
+    /// The URL currently loaded in the window's webview.
+    pub url: String,
+    /// The window's title bar text.
+    pub title: String,
+    /// Whether the window is currently visible (not minimised/hidden).
+    pub visible: bool,
 }
 
 /// Response sent back to the Playwright test runner.
@@ -312,5 +352,72 @@ impl Response {
             data: None,
             error: Some(msg.into()),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn envelope_parses_legacy_bare_command_without_window() {
+        // Old clients (pre-0.3) send commands with no `window` field.
+        let raw = r##"{"type":"click","selector":"#btn","timeout_ms":1000}"##;
+        let env: CommandEnvelope = serde_json::from_str(raw).expect("parse legacy command");
+        assert!(env.window.is_none());
+        match env.cmd {
+            Command::Click { selector, timeout_ms } => {
+                assert_eq!(selector, "#btn");
+                assert_eq!(timeout_ms, 1000);
+            }
+            _ => panic!("expected Click variant"),
+        }
+    }
+
+    #[test]
+    fn envelope_parses_command_with_window_field() {
+        let raw = r##"{"window":"viewer","type":"click","selector":"#btn"}"##;
+        let env: CommandEnvelope = serde_json::from_str(raw).expect("parse scoped command");
+        assert_eq!(env.window.as_deref(), Some("viewer"));
+        match env.cmd {
+            Command::Click { selector, .. } => assert_eq!(selector, "#btn"),
+            _ => panic!("expected Click variant"),
+        }
+    }
+
+    #[test]
+    fn envelope_parses_list_windows_command() {
+        let raw = r#"{"type":"list_windows"}"#;
+        let env: CommandEnvelope = serde_json::from_str(raw).expect("parse list_windows");
+        assert!(env.window.is_none());
+        assert!(matches!(env.cmd, Command::ListWindows));
+    }
+
+    #[test]
+    fn envelope_rejects_unknown_command_type() {
+        // Lock in the error wording for unknown variants — guards against a
+        // future `#[serde(flatten)]` regression silently swallowing typos.
+        let raw = r#"{"window":"v","type":"definitely_not_a_command"}"#;
+        let err = serde_json::from_str::<CommandEnvelope>(raw).unwrap_err();
+        assert!(
+            err.to_string().contains("unknown variant"),
+            "expected `unknown variant` in error, got: {err}"
+        );
+    }
+
+    #[test]
+    fn window_info_serializes_with_expected_field_names() {
+        let info = WindowInfo {
+            label: "viewer".into(),
+            url: "http://x/v".into(),
+            title: "Viewer".into(),
+            visible: true,
+        };
+        let json = serde_json::to_string(&info).unwrap();
+        // Field names must match what the TS client expects.
+        assert!(json.contains(r#""label":"viewer""#));
+        assert!(json.contains(r#""url":"http://x/v""#));
+        assert!(json.contains(r#""title":"Viewer""#));
+        assert!(json.contains(r#""visible":true"#));
     }
 }

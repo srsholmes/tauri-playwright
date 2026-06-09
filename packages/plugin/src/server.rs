@@ -5,7 +5,7 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::sync::{oneshot, Mutex};
 use tauri::{AppHandle, Manager, Runtime, WebviewWindow};
 
-use crate::commands::{Command, Response};
+use crate::commands::{Command, CommandEnvelope, Response, WindowInfo};
 use crate::native_capture::RecordingSession;
 
 static COUNTER: AtomicU64 = AtomicU64::new(0);
@@ -114,8 +114,11 @@ async fn handle_connection<R: Runtime, Reader, Writer>(
         let line = line.trim().to_string();
         if line.is_empty() { continue; }
 
-        let response = match serde_json::from_str::<Command>(&line) {
-            Ok(cmd) => execute_command(&app, &pending, &recording, window_label, cmd).await,
+        let response = match serde_json::from_str::<CommandEnvelope>(&line) {
+            Ok(envelope) => {
+                let target = envelope.window.as_deref().unwrap_or(window_label);
+                execute_command(&app, &pending, &recording, target, envelope.cmd).await
+            }
             Err(e) => Response::err(format!("invalid command: {}", e)),
         };
 
@@ -533,6 +536,32 @@ async fn execute_command<R: Runtime>(
                 None => Response::err("no recording in progress"),
             }
         }
+        Command::ListWindows => list_windows(app).await,
+    }
+}
+
+/// Enumerate all open webview windows. Returns label, current URL, title and
+/// visibility for each. Test code uses this to discover newly-opened windows
+/// (e.g., a viewer or settings dialog) and pin subsequent commands to them.
+async fn list_windows<R: Runtime>(app: &Arc<AppHandle<R>>) -> Response {
+    // Sort by label for deterministic iteration — `webview_windows()` returns a
+    // `HashMap`, so without sorting, callers polling with `waitForWindow` could
+    // get a different match each run when multiple windows match a predicate.
+    let mut entries: Vec<_> = app.webview_windows().into_iter().collect();
+    entries.sort_by(|a, b| a.0.cmp(&b.0));
+    let mut infos: Vec<WindowInfo> = Vec::new();
+    for (label, window) in entries {
+        let url = window
+            .url()
+            .map(|u| u.to_string())
+            .unwrap_or_else(|_| String::new());
+        let title = window.title().unwrap_or_default();
+        let visible = window.is_visible().unwrap_or(false);
+        infos.push(WindowInfo { label, url, title, visible });
+    }
+    match serde_json::to_value(&infos) {
+        Ok(v) => Response::ok(v),
+        Err(e) => Response::err(format!("serialize windows: {}", e)),
     }
 }
 
@@ -578,7 +607,14 @@ async fn eval_js<R: Runtime>(
             attempts += 1;
             if attempts >= 20 {
                 pending.lock().await.remove(&id);
-                return Response::err(format!("window '{}' not found after retries", window_label));
+                let mut available: Vec<String> =
+                    app.webview_windows().keys().cloned().collect();
+                available.sort();
+                return Response::err(format!(
+                    "window '{}' not found after retries (available windows: [{}])",
+                    window_label,
+                    available.join(", ")
+                ));
             }
             tokio::time::sleep(std::time::Duration::from_millis(100)).await;
         }

@@ -63,6 +63,7 @@ examples/
 - **Dynamic mock handlers**: IPC mocks are serialized as function strings and injected into the page.
 - **`withGlobalTauri: true` required**: The mock intercepts `window.__TAURI_INTERNALS__`.
 - **Native capture**: CoreGraphics FFI on macOS for pixel-perfect screenshots and video frame capture.
+- **Multi-window via `CommandEnvelope` (0.3.0+)**: Every line on the wire is parsed as a `CommandEnvelope { window: Option<String>, #[serde(flatten)] cmd: Command }`. The server resolves the effective window label as `envelope.window.unwrap_or(plugin_default_label)` and passes it to `eval_js`. Old clients that send a bare `Command` (no `window` field) still parse cleanly thanks to `#[serde(flatten)]` + `Option<String>` — so the change is fully backward compatible. The TS `TauriPage` has an optional `defaultWindow` field, a `.window(label)` fork method, `.listWindows()`, and `.waitForWindow(predicate)`; the `.window()` fork shares the same socket.
 
 ## Tech Stack
 

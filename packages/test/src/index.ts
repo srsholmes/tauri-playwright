@@ -10,13 +10,19 @@ export { generateIpcMockScript } from './ipc-mock.js';
 
 // Tauri mode classes
 export { TauriPage, TauriLocator, TauriKeyboard, TauriMouse } from './tauri-page.js';
-export type { TimeoutOption } from './tauri-page.js';
+export type { TimeoutOption, WaitForWindowOption } from './tauri-page.js';
 export { BrowserPageAdapter } from './browser-page-adapter.js';
 export type { LocatorLike } from './expect.js';
 export { PluginClient } from './socket-client.js';
 export { TauriProcessManager } from './process-manager.js';
 
 // Types
-export type { TauriTestConfig, TestMode, TauriFixtures, CapturedInvoke } from './types.js';
+export type {
+  TauriTestConfig,
+  TestMode,
+  TauriFixtures,
+  CapturedInvoke,
+  WindowInfo,
+} from './types.js';
 export type { PluginResponse } from './socket-client.js';
 export type { ProcessConfig } from './process-manager.js';
