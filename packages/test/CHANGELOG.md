@@ -4,6 +4,12 @@
 
 ### Minor Changes
 
+- 6071e31: Add multi-window targeting. `TauriPage` gains an optional `defaultWindow` constructor argument plus `.window(label)`, `.listWindows()`, and `.waitForWindow(predicate, options?)`. Backward compatible with existing single-window code. Requires `tauri-plugin-playwright >= 0.3.0` for the new `list_windows` command.
+
+## 0.3.0
+
+### Minor Changes
+
 - Add multi-window targeting. `TauriPage` gains an optional `defaultWindow`
   constructor argument and three new methods:
   - `page.window(label)` — fork a new `TauriPage` scoped to a specific webview
