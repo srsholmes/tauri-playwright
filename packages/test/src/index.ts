@@ -16,6 +16,11 @@ export type { LocatorLike } from './expect.js';
 export { PluginClient } from './socket-client.js';
 export { TauriProcessManager } from './process-manager.js';
 
+// Trace recorder (Playwright-compatible trace.zip output)
+export { TraceRecorder } from './trace/recorder.js';
+export type { CaptureFrame } from './trace/recorder.js';
+export { TracingPluginClient } from './trace/tracing-plugin-client.js';
+
 // Types
 export type {
   TauriTestConfig,

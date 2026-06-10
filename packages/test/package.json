@@ -26,6 +26,9 @@
   "peerDependencies": {
     "@playwright/test": "^1.40.0"
   },
+  "dependencies": {
+    "fflate": "^0.8.2"
+  },
   "devDependencies": {
     "@playwright/test": "^1.52.0",
     "@types/node": "^25.5.0",
