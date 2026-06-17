@@ -272,22 +272,90 @@ pub mod platform {
         }
     }
 
-    /// Take a native screenshot of our process's main window.
+    // --- Objective-C runtime FFI (to read NSWindow.windowNumber) ---
+
+    extern "C" {
+        fn sel_registerName(name: *const std::os::raw::c_char) -> *const c_void;
+        fn objc_msgSend();
+    }
+
+    /// Resolve the CoreGraphics window ID for a Tauri window by its label.
     ///
-    /// `app`/`window_label` are accepted for signature parity with the Linux
-    /// path (which needs them to reach the right webview); the macOS
-    /// CoreGraphics path captures by process id and ignores them for now.
+    /// Tauri's `NSWindow.windowNumber` is exactly the `kCGWindowNumber` that
+    /// CoreGraphics enumerates, so the value maps 1:1 to what
+    /// `capture_window_png` expects. Returns `None` (caller falls back to the
+    /// pid's frontmost window) if the label can't be resolved, the NSWindow
+    /// pointer is unavailable, or the window number is non-positive.
+    fn cg_window_id_for_label<R: tauri::Runtime>(
+        app: &tauri::AppHandle<R>,
+        window_label: &str,
+    ) -> Option<u32> {
+        use tauri::Manager;
+
+        let window = app.get_webview_window(window_label)?;
+        let ns_window = match window.ns_window() {
+            Ok(ptr) => ptr,
+            Err(e) => {
+                eprintln!(
+                    "tauri-plugin-playwright: ns_window() failed for '{}': {}",
+                    window_label, e
+                );
+                return None;
+            }
+        };
+        if ns_window.is_null() {
+            return None;
+        }
+
+        // Send -[NSWindow windowNumber], which returns NSInteger (isize).
+        // The objc_msgSend symbol must be transmuted to the exact call
+        // signature on arm64, where variadic dispatch is not ABI-compatible.
+        let num: isize = unsafe {
+            let sel = sel_registerName(c"windowNumber".as_ptr());
+            let msg: extern "C" fn(*mut c_void, *const c_void) -> isize =
+                std::mem::transmute(objc_msgSend as *const ());
+            msg(ns_window, sel)
+        };
+
+        if num <= 0 {
+            eprintln!(
+                "tauri-plugin-playwright: windowNumber <= 0 for '{}' (got {})",
+                window_label, num
+            );
+            return None;
+        }
+        Some(num as u32)
+    }
+
+    /// Take a native screenshot of the named Tauri window.
+    ///
+    /// Resolves `window_label` to its CoreGraphics window ID via
+    /// `NSWindow.windowNumber` and captures that exact window, regardless of
+    /// z-order (so a window ordered behind others is still captured). Falls
+    /// back to the pid's frontmost on-screen window when the label can't be
+    /// resolved.
     pub fn screenshot<R: tauri::Runtime>(
-        _app: &tauri::AppHandle<R>,
-        _window_label: &str,
+        app: &tauri::AppHandle<R>,
+        window_label: &str,
     ) -> Result<Vec<u8>, String> {
-        let pid = std::process::id();
-        let window_id = find_window_id(pid)?;
-        eprintln!(
-            "tauri-plugin-playwright: native screenshot pid={} window={}",
-            pid, window_id
-        );
-        capture_window_png(window_id)
+        match cg_window_id_for_label(app, window_label) {
+            Some(window_id) => {
+                eprintln!(
+                    "tauri-plugin-playwright: native screenshot label={} window={}",
+                    window_label, window_id
+                );
+                capture_window_png(window_id)
+            }
+            None => {
+                let pid = std::process::id();
+                let window_id = find_window_id(pid)?;
+                eprintln!(
+                    "tauri-plugin-playwright: native screenshot fell back to frontmost (label='{}') pid={} window={}",
+                    window_label, pid, window_id
+                );
+                capture_window_png(window_id)
+            }
+        }
     }
 }
 
