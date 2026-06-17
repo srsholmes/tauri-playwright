@@ -286,45 +286,86 @@ pub mod platform {
     /// `capture_window_png` expects. Returns `None` (caller falls back to the
     /// pid's frontmost window) if the label can't be resolved, the NSWindow
     /// pointer is unavailable, or the window number is non-positive.
+    ///
+    /// `ns_window()` and `-[NSWindow windowNumber]` are AppKit, which is
+    /// main-thread-affine: calling them off the main thread hangs. The native
+    /// screenshot runs on a blocking thread pool (`take_native_screenshot` uses
+    /// `spawn_blocking`), so we hop onto the main thread via
+    /// `run_on_main_thread`, resolve the number there, and return it through a
+    /// channel. The raw NSWindow pointer is never sent across threads — it's
+    /// obtained and used entirely inside the main-thread closure.
     fn cg_window_id_for_label<R: tauri::Runtime>(
         app: &tauri::AppHandle<R>,
         window_label: &str,
     ) -> Option<u32> {
+        use std::sync::mpsc;
         use tauri::Manager;
 
         let window = app.get_webview_window(window_label)?;
-        let ns_window = match window.ns_window() {
-            Ok(ptr) => ptr,
-            Err(e) => {
-                eprintln!(
-                    "tauri-plugin-playwright: ns_window() failed for '{}': {}",
-                    window_label, e
-                );
-                return None;
-            }
-        };
-        if ns_window.is_null() {
-            return None;
-        }
+        let label = window_label.to_string();
+        let (tx, rx) = mpsc::channel::<Option<u32>>();
 
-        // Send -[NSWindow windowNumber], which returns NSInteger (isize).
-        // The objc_msgSend symbol must be transmuted to the exact call
-        // signature on arm64, where variadic dispatch is not ABI-compatible.
-        let num: isize = unsafe {
-            let sel = sel_registerName(c"windowNumber".as_ptr());
-            let msg: extern "C" fn(*mut c_void, *const c_void) -> isize =
-                std::mem::transmute(objc_msgSend as *const ());
-            msg(ns_window, sel)
-        };
+        let dispatch = app.run_on_main_thread(move || {
+            let result = (|| {
+                let ns_window = match window.ns_window() {
+                    Ok(ptr) => ptr,
+                    Err(e) => {
+                        eprintln!(
+                            "tauri-plugin-playwright: ns_window() failed for '{}': {}",
+                            label, e
+                        );
+                        return None;
+                    }
+                };
+                if ns_window.is_null() {
+                    return None;
+                }
 
-        if num <= 0 {
+                // Send -[NSWindow windowNumber], which returns NSInteger (isize).
+                // SAFETY: on the main thread (AppKit requirement, guaranteed by
+                // run_on_main_thread). `ns_window` is a valid, non-null NSWindow*
+                // (checked above). `objc_msgSend` is transmuted to the exact
+                // `windowNumber` ABI — (id, SEL) -> NSInteger, no variadic args —
+                // which is required on arm64 where variadic dispatch isn't
+                // ABI-compatible.
+                let num: isize = unsafe {
+                    let sel = sel_registerName(c"windowNumber".as_ptr());
+                    let msg: extern "C" fn(*mut c_void, *const c_void) -> isize =
+                        std::mem::transmute(objc_msgSend as *const ());
+                    msg(ns_window, sel)
+                };
+
+                if num <= 0 {
+                    eprintln!(
+                        "tauri-plugin-playwright: windowNumber <= 0 for '{}' (got {})",
+                        label, num
+                    );
+                    return None;
+                }
+                Some(num as u32)
+            })();
+            // The receiver may have hung up (capture aborted); ignore send errors.
+            let _ = tx.send(result);
+        });
+
+        if let Err(e) = dispatch {
             eprintln!(
-                "tauri-plugin-playwright: windowNumber <= 0 for '{}' (got {})",
-                window_label, num
+                "tauri-plugin-playwright: run_on_main_thread failed for '{}': {}",
+                window_label, e
             );
             return None;
         }
-        Some(num as u32)
+
+        match rx.recv() {
+            Ok(id) => id,
+            Err(e) => {
+                eprintln!(
+                    "tauri-plugin-playwright: main-thread window-id resolution dropped for '{}': {}",
+                    window_label, e
+                );
+                None
+            }
+        }
     }
 
     /// Take a native screenshot of the named Tauri window.
