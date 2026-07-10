@@ -1,3 +1,4 @@
+import { readFile } from 'node:fs/promises';
 import { test as base, chromium, type Page, type TestInfo } from '@playwright/test';
 import { tauriExpect } from './expect.js';
 import { generateIpcMockScript } from './ipc-mock.js';
@@ -5,6 +6,8 @@ import { PluginClient } from './socket-client.js';
 import { TauriPage } from './tauri-page.js';
 import { BrowserPageAdapter } from './browser-page-adapter.js';
 import { TauriProcessManager } from './process-manager.js';
+import { TraceRecorder } from './trace/recorder.js';
+import { TracingPluginClient } from './trace/tracing-plugin-client.js';
 import type { TauriTestConfig, TauriFixtures, CapturedInvoke } from './types.js';
 
 /**
@@ -82,8 +85,10 @@ export function createTauriTest(config: TauriTestConfig) {
             await pm.waitForSocket(30000);
           }
 
-          // Connect to the plugin
-          client = new PluginClient(socketPath);
+          // Connect to the plugin (with a tracing-aware wrapper so we can
+          // record Playwright-compatible traces without touching TauriPage).
+          const tracer = new TraceRecorder();
+          client = new TracingPluginClient(socketPath, undefined, tracer);
           await client.connect();
 
           // Verify connection
@@ -116,7 +121,35 @@ export function createTauriTest(config: TauriTestConfig) {
             // Recording failed to start — non-fatal
           }
 
+          // Start Playwright-compatible trace capture. Tracer wraps the
+          // client we already constructed, so every action command will
+          // trigger before/after native screenshots and land in trace.zip.
+          let tracingActive = false;
+          try {
+            const tr = tracer.start(testInfo.outputPath('trace-dir'));
+            tracingActive = tr.ok;
+          } catch {
+            // Trace start failed — non-fatal
+          }
+
           await use(tauriPage as TauriFixtures['tauriPage']);
+
+          // After test: stop tracing first so the last captured frames
+          // land in the zip before we tear down the recording session.
+          if (tracingActive) {
+            try {
+              const stopped = await tracer.stop();
+              if (stopped.ok) {
+                const traceBuffer = await readFile(stopped.path);
+                await testInfo.attach('trace', {
+                  body: traceBuffer,
+                  contentType: 'application/zip',
+                });
+              }
+            } catch {
+              // Trace stop/attach failed — non-fatal
+            }
+          }
 
           // After test: stop recording and capture screenshot on failure
           let videoPath: string | null = null;
@@ -147,7 +180,6 @@ export function createTauriTest(config: TauriTestConfig) {
           // Attach video if available (on failure or always, depending on config)
           if (videoPath) {
             try {
-              const { readFile } = await import('node:fs/promises');
               const videoBuffer = await readFile(videoPath);
               await testInfo.attach('video', {
                 body: videoBuffer,
