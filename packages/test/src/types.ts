@@ -57,6 +57,19 @@ export interface TauriTestConfig {
   startTimeout?: number;
 
   /**
+   * Tauri mode only. Reload the page (`window.location.href = devUrl`) before
+   * each test to reset state. Default: `true`.
+   *
+   * Set to `false` for apps whose reload reboots a heavy runtime (re-running
+   * app bootstrap, reconnecting sockets, etc.): the post-reload readiness poll
+   * races that reboot, and an `eval` issued mid-navigation never receives its
+   * `pw_result` — so the test hangs until the plugin's 30s eval timeout. With
+   * the reload off, tests run against the app's current (shared) state; reset
+   * explicitly where a test needs a clean slate.
+   */
+  reloadBeforeEach?: boolean;
+
+  /**
    * CDP endpoint for connecting to WebView2 on Windows.
    * When mode is 'cdp', Playwright connects directly via Chrome DevTools Protocol.
    * @example 'http://localhost:9222'

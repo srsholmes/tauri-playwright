@@ -63,6 +63,16 @@ export function createTauriTest(config: TauriTestConfig) {
 
         try {
           const socketPath = config.mcpSocket ?? '/tmp/tauri-playwright.sock';
+          // Windows can't bind a Unix domain socket, so the Rust plugin falls
+          // back to a TCP listener (127.0.0.1:6274 by default). Track which
+          // endpoint we should actually dial rather than always assuming the
+          // socket path.
+          const isWindows = process.platform === 'win32';
+          const envPort = Number(process.env.TAURI_PW_TCP_PORT);
+          const defaultTcpPort =
+            Number.isFinite(envPort) && envPort > 0 ? envPort : 6274;
+          let connectSocketPath: string | undefined = socketPath;
+          let connectTcpPort: number | undefined;
 
           // If a Tauri command is configured, spawn the app
           if (config.tauriCommand) {
@@ -75,16 +85,42 @@ export function createTauriTest(config: TauriTestConfig) {
               socketPath,
               startTimeout: config.startTimeout ?? 120,
             });
-            await processManager.start();
+            // start() already parses the plugin's "listening on ..." line and
+            // returns { socketPath } or { tcpPort }; honor whichever it found
+            // instead of discarding it and hardcoding the socket path.
+            const started = await processManager.start();
+            if (started?.tcpPort) {
+              connectTcpPort = started.tcpPort;
+              connectSocketPath = undefined;
+            } else if (started?.socketPath) {
+              connectSocketPath = started.socketPath;
+            }
+          } else if (isWindows) {
+            // Already-running app on Windows: there is no socket file to wait
+            // for — the plugin is listening on TCP.
+            connectTcpPort = defaultTcpPort;
+            connectSocketPath = undefined;
           } else {
             // Assume the app is already running — wait for the socket
             const pm = new TauriProcessManager({ socketPath });
             await pm.waitForSocket(30000);
           }
 
-          // Connect to the plugin
-          client = new PluginClient(socketPath);
-          await client.connect();
+          // Connect to the plugin, retrying while the app finishes booting.
+          const connectDeadline = Date.now() + 30000;
+          for (;;) {
+            client = connectTcpPort
+              ? new PluginClient(undefined, connectTcpPort)
+              : new PluginClient(connectSocketPath);
+            try {
+              await client.connect();
+              break;
+            } catch (err) {
+              client = null;
+              if (Date.now() > connectDeadline) throw err;
+              await new Promise((r) => setTimeout(r, 300));
+            }
+          }
 
           // Verify connection
           const ping = await client.send({ type: 'ping' });
@@ -94,11 +130,17 @@ export function createTauriTest(config: TauriTestConfig) {
 
           tauriPage = new TauriPage(client);
 
-          // Reset app state by reloading the page before each test
           if (config.devUrl) {
-            await tauriPage.evaluate(`window.location.href = ${JSON.stringify(config.devUrl)}`);
-            // Wait for the page to reload and the polling bridge to reconnect
-            await new Promise((r) => setTimeout(r, 500));
+            // Reset app state by reloading the page before each test. Skipped
+            // when reloadBeforeEach is false: on apps whose reload reboots a
+            // heavy runtime, the readiness poll below races that reboot and an
+            // eval issued mid-navigation never gets its pw_result, hanging the
+            // test until the plugin's 30s eval timeout.
+            if (config.reloadBeforeEach !== false) {
+              await tauriPage.evaluate(`window.location.href = ${JSON.stringify(config.devUrl)}`);
+              // Wait for the page to reload and the polling bridge to reconnect
+              await new Promise((r) => setTimeout(r, 500));
+            }
             await tauriPage.waitForFunction(
               'document.readyState === "complete" && !!window.__PW_ACTIVE__',
             );
