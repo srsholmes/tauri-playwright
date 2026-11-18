@@ -120,6 +120,16 @@ export default defineConfig({
 });
 ```
 
+If you only test in Tauri or CDP mode, pass that mode to `createTauriTest()` too. Playwright then
+won't launch a headless Chromium for every worker, so you can skip `npx playwright install chromium`.
+
+```ts
+export const { test, expect } = createTauriTest({
+  devUrl: 'http://localhost:1420',
+  mode: 'tauri',
+});
+```
+
 ### 6. Run tests
 
 ```bash

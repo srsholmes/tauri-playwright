@@ -62,6 +62,12 @@ export interface TauriTestConfig {
    * @example 'http://localhost:9222'
    */
   cdpEndpoint?: string;
+
+  /**
+   * Mode for projects that don't set `use: { mode }`. Default: 'browser'.
+   * With 'tauri' or 'cdp', Playwright skips launching Chromium, and browser mode throws.
+   */
+  mode?: TestMode;
 }
 
 /**
